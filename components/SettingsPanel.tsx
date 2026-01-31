@@ -37,15 +37,29 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
         <div>
           <div className="flex items-center justify-between mb-3">
             <label className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Confidence Threshold</label>
-            <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400 mono">{Math.round(threshold * 100)}%</span>
+            <div className="flex items-center gap-0.5">
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="1"
+                value={Math.round(threshold * 100)}
+                onChange={(e) => {
+                  const val = Math.min(100, Math.max(0, Number(e.target.value) || 0));
+                  onThresholdChange(val / 100);
+                }}
+                className="w-14 text-right text-sm font-bold text-indigo-600 dark:text-indigo-400 mono bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/30 rounded-lg px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
+              />
+              <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400 mono">%</span>
+            </div>
           </div>
-          <input 
-            type="range" 
-            min="0.05" 
-            max="0.95" 
-            step="0.05" 
-            value={threshold}
-            onChange={(e) => onThresholdChange(parseFloat(e.target.value))}
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="1"
+            value={Math.round(threshold * 100)}
+            onChange={(e) => onThresholdChange(Number(e.target.value) / 100)}
             className="w-full h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
           />
           <div className="flex justify-between mt-2 text-[10px] text-zinc-400 dark:text-zinc-600 font-bold uppercase tracking-wider">

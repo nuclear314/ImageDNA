@@ -1,21 +1,15 @@
-
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { 
-  Upload, 
-  Image as ImageIcon, 
-  Copy, 
-  Check, 
-  RefreshCcw, 
-  Settings2, 
-  Info, 
-  Sparkles, 
-  ChevronRight, 
-  Zap, 
-  Tag as TagIcon, 
-  Star 
+import React, { useState, useMemo, useEffect } from 'react';
+import {
+  Image as ImageIcon,
+  Copy,
+  Check,
+  RefreshCcw,
+  ChevronRight,
+  Zap,
+  Tag as TagIcon,
+  Star
 } from 'lucide-react';
-import { AppState, Tag, InterrogationResult } from './types';
-import { GoogleGenAI } from "@google/genai";
+import { AppState, Tag } from './types';
 
 // UI Components
 import Header from './components/Header';
@@ -24,7 +18,6 @@ import TagGrid from './components/TagGrid';
 import SettingsPanel from './components/SettingsPanel';
 import ProcessingState from './components/ProcessingState';
 
-const MASTERPIECE_PROMPT = "masterpiece, best quality, highres, ultra-detailed";
 const MASTERPIECE_LABELS = ['masterpiece', 'best_quality', 'highres', 'ultra-detailed', 'ultra_detailed', 'amazing_quality'];
 
 const App: React.FC = () => {
@@ -36,8 +29,7 @@ const App: React.FC = () => {
   const [negativeTags, setNegativeTags] = useState("");
   const [includeMasterpiece, setIncludeMasterpiece] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [refinedPrompt, setRefinedPrompt] = useState<string | null>(null);
-  const [isRefining, setIsRefining] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   useEffect(() => {
     if (isDarkMode) {
@@ -63,20 +55,25 @@ const App: React.FC = () => {
       return isAboveThreshold && isNotExcluded;
     });
 
-    // Masterpiece Filter for the Visual Grid
-    if (!includeMasterpiece) {
-      filtered = filtered.filter(tag => !MASTERPIECE_LABELS.includes(tag.label.toLowerCase()));
+    // Strip any tagger-generated masterpiece tags (added synthetically if toggle is on)
+    filtered = filtered.filter(tag => !MASTERPIECE_LABELS.includes(tag.label.toLowerCase()));
+
+    // Sort by confidence descending
+    filtered.sort((a, b) => b.confidence - a.confidence);
+
+    // Prepend masterpiece tags if toggle is on
+    if (includeMasterpiece) {
+      filtered = [
+        { label: 'masterpiece', confidence: 1, category: 'general' as const },
+        { label: 'best quality', confidence: 1, category: 'general' as const },
+        { label: 'highres', confidence: 1, category: 'general' as const },
+        { label: 'ultra-detailed', confidence: 1, category: 'general' as const },
+        ...filtered,
+      ];
     }
 
     // Generate the raw prompt string
-    let rawPrompt = filtered.map(t => t.label).join(', ');
-    
-    if (includeMasterpiece) {
-      const hasAnyMasterpiece = filtered.some(t => MASTERPIECE_LABELS.includes(t.label.toLowerCase()));
-      if (!hasAnyMasterpiece) {
-        rawPrompt = rawPrompt ? `${rawPrompt}, ${MASTERPIECE_PROMPT}` : MASTERPIECE_PROMPT;
-      }
-    }
+    const rawPrompt = filtered.map(t => t.label).join(', ');
 
     return {
       tags: filtered,
@@ -85,28 +82,36 @@ const App: React.FC = () => {
     };
   }, [rawResultTags, threshold, negativeTags, state, includeMasterpiece]);
 
-  const handleInterrogate = async (imageData: string) => {
+  const handleInterrogate = async (file: File) => {
     setState(AppState.INTERROGATING);
-    setRefinedPrompt(null);
-    await new Promise(resolve => setTimeout(resolve, 2500));
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
 
-    const rawMockTags: Tag[] = [
-      { label: '1girl', confidence: 0.98, category: 'general' },
-      { label: 'solo', confidence: 0.95, category: 'general' },
-      { label: 'blue_hair', confidence: 0.88, category: 'general' },
-      { label: 'long_hair', confidence: 0.85, category: 'general' },
-      { label: 'sitting', confidence: 0.72, category: 'general' },
-      { label: 'school_uniform', confidence: 0.81, category: 'general' },
-      { label: 'outdoors', confidence: 0.65, category: 'general' },
-      { label: 'looking_at_viewer', confidence: 0.92, category: 'general' },
-      { label: 'masterpiece', confidence: 0.99, category: 'meta' },
-      { label: 'best_quality', confidence: 0.99, category: 'meta' },
-      { label: 'highres', confidence: 0.95, category: 'meta' },
-      { label: 'hatsune_miku', confidence: 0.91, category: 'character' },
-    ];
+      const response = await fetch('/api/tag', {
+        method: 'POST',
+        body: formData,
+      });
 
-    setRawResultTags(rawMockTags);
-    setState(AppState.RESULT);
+      if (!response.ok) throw new Error('Tagging failed');
+
+      const data = await response.json();
+
+      const tags: Tag[] = [
+        ...Object.entries(data.general_tags).map(([label, confidence]) => ({
+          label, confidence: confidence as number, category: 'general' as const
+        })),
+        ...Object.entries(data.character_tags).map(([label, confidence]) => ({
+          label, confidence: confidence as number, category: 'character' as const
+        })),
+      ];
+
+      setRawResultTags(tags);
+      setState(AppState.RESULT);
+    } catch (err) {
+      console.error(err);
+      setState(AppState.ERROR);
+    }
   };
 
   const handleFileUpload = (file: File) => {
@@ -114,7 +119,7 @@ const App: React.FC = () => {
     reader.onload = (e) => {
       const dataUrl = e.target?.result as string;
       setImage(dataUrl);
-      handleInterrogate(dataUrl);
+      handleInterrogate(file);
     };
     reader.readAsDataURL(file);
   };
@@ -125,29 +130,10 @@ const App: React.FC = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const refineWithAI = async () => {
-    if (!result) return;
-    setIsRefining(true);
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: `Given these image tags from a WD14 interrogator: "${result.rawPrompt}", write a descriptive, high-quality Stable Diffusion prompt that flows naturally but maintains the essence of these tags. Avoid generic filler.`,
-        config: { temperature: 0.7 }
-      });
-      setRefinedPrompt(response.text || "Failed to refine.");
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsRefining(false);
-    }
-  };
-
   const reset = () => {
     setState(AppState.IDLE);
     setImage(null);
     setRawResultTags([]);
-    setRefinedPrompt(null);
     setIncludeMasterpiece(false);
   };
 
@@ -196,12 +182,28 @@ const App: React.FC = () => {
               {!image ? (
                 <Dropzone onUpload={handleFileUpload} />
               ) : (
-                <div className="relative group rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 aspect-square bg-zinc-50 dark:bg-zinc-950">
+                <div
+                  className={`relative group rounded-xl overflow-hidden border aspect-square bg-zinc-50 dark:bg-zinc-950 transition-all ${isDragOver ? 'border-indigo-500 ring-2 ring-indigo-500/50' : 'border-zinc-200 dark:border-zinc-700'}`}
+                  onDragEnter={(e) => { e.preventDefault(); setIsDragOver(true); }}
+                  onDragLeave={(e) => { e.preventDefault(); setIsDragOver(false); }}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragOver(false);
+                    if (e.dataTransfer.files?.[0]) {
+                      handleFileUpload(e.dataTransfer.files[0]);
+                    }
+                  }}
+                >
                   <img src={image} className="w-full h-full object-contain" alt="Target" />
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <button onClick={reset} className="bg-white text-black px-4 py-2 rounded-full font-medium shadow-lg transform translate-y-2 group-hover:translate-y-0 transition-all">
-                      Change Image
-                    </button>
+                  <div className={`absolute inset-0 bg-black/40 transition-opacity flex items-center justify-center ${isDragOver ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                    {isDragOver ? (
+                      <span className="bg-indigo-600 text-white px-4 py-2 rounded-full font-medium shadow-lg">Drop to replace</span>
+                    ) : (
+                      <button onClick={reset} className="bg-white text-black px-4 py-2 rounded-full font-medium shadow-lg transform translate-y-2 group-hover:translate-y-0 transition-all">
+                        Change Image
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -276,55 +278,14 @@ const App: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-sm">
-                   <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="bg-indigo-500/10 p-2 rounded-lg">
-                        <Sparkles className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-zinc-700 dark:text-zinc-200">AI Prompt Refinement</h3>
-                        <p className="text-xs text-zinc-400 dark:text-zinc-500">Convert comma-separated tags into natural flow.</p>
-                      </div>
-                    </div>
-                    {!refinedPrompt && !isRefining && (
-                      <button 
-                        onClick={refineWithAI}
-                        className="text-xs font-semibold px-3 py-2 bg-zinc-50 dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-lg transition-colors border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300"
-                      >
-                        Refine Tags
-                      </button>
-                    )}
-                   </div>
+              </div>
+            )}
 
-                   {isRefining ? (
-                     <div className="py-8 text-center text-zinc-400 dark:text-zinc-500 animate-pulse italic">
-                        Asking Gemini to architect your prompt...
-                     </div>
-                   ) : refinedPrompt ? (
-                     <div className="space-y-4">
-                        <div className="bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-100 dark:border-zinc-800 p-4 rounded-xl relative group">
-                          <p className="text-sm leading-relaxed text-zinc-600 dark:text-zinc-300 italic">{refinedPrompt}</p>
-                          <button 
-                            onClick={() => handleCopy(refinedPrompt)}
-                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-2 bg-white dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700 rounded-lg"
-                          >
-                            <Copy className="w-4 h-4 text-zinc-400" />
-                          </button>
-                        </div>
-                        <button 
-                          onClick={() => setRefinedPrompt(null)}
-                          className="text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-600 hover:text-indigo-500 font-bold"
-                        >
-                          Clear Refinement
-                        </button>
-                     </div>
-                   ) : (
-                     <div className="p-4 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl text-center">
-                        <p className="text-xs text-zinc-400 dark:text-zinc-600">Click refine to generate an artistic natural language prompt.</p>
-                     </div>
-                   )}
-                </div>
+            {state === AppState.ERROR && (
+              <div className="h-full min-h-[400px] flex flex-col items-center justify-center border-2 border-dashed border-red-200 dark:border-red-900 rounded-3xl text-red-400 dark:text-red-500 p-12 text-center">
+                <h3 className="text-xl font-medium text-red-600 dark:text-red-400 mb-2">Tagging Failed</h3>
+                <p className="max-w-xs">Could not connect to the tagger. Make sure server.py is running.</p>
+                <button onClick={reset} className="mt-4 px-4 py-2 bg-red-500/10 text-red-600 dark:text-red-400 rounded-lg text-sm hover:bg-red-500/20 transition-colors">Try Again</button>
               </div>
             )}
           </div>
@@ -341,7 +302,7 @@ const App: React.FC = () => {
             <a href="#" className="hover:text-zinc-800 dark:hover:text-zinc-300 transition-colors underline decoration-zinc-200 dark:decoration-zinc-800">SmilingWolf Dataset</a>
             <a href="#" className="hover:text-zinc-800 dark:hover:text-zinc-300 transition-colors underline decoration-zinc-200 dark:decoration-zinc-800">TOS</a>
             <span className="text-zinc-200 dark:text-zinc-700">|</span>
-            <span>ImageDNA © 2024</span>
+            <span>ImageDNA © 2026</span>
           </div>
         </div>
       </footer>
