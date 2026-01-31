@@ -1,12 +1,13 @@
 import os
 import sys
 import tempfile
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tagger import WD14Tagger
 
 app = Flask(__name__)
+STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dist')
 _tagger = None
 
 
@@ -35,6 +36,14 @@ def tag_image():
         return jsonify(results)
     finally:
         os.unlink(tmp_path)
+
+
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_frontend(path):
+    if path and os.path.exists(os.path.join(STATIC_DIR, path)):
+        return send_from_directory(STATIC_DIR, path)
+    return send_from_directory(STATIC_DIR, 'index.html')
 
 
 if __name__ == '__main__':

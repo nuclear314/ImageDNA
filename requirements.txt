@@ -1,0 +1,5 @@
+flask
+huggingface_hub
+numpy
+onnxruntime
+Pillow

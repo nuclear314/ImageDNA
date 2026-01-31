@@ -7,7 +7,9 @@ import {
   ChevronRight,
   Zap,
   Tag as TagIcon,
-  Star
+  Star,
+  Type,
+  Sliders
 } from 'lucide-react';
 import { AppState, Tag } from './types';
 
@@ -18,16 +20,38 @@ import TagGrid from './components/TagGrid';
 import SettingsPanel from './components/SettingsPanel';
 import ProcessingState from './components/ProcessingState';
 
+function useLocalStorage<T>(key: string, defaultValue: T): [T, (val: T) => void] {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const stored = localStorage.getItem(key);
+      return stored !== null ? JSON.parse(stored) : defaultValue;
+    } catch {
+      return defaultValue;
+    }
+  });
+
+  const setStoredValue = (newValue: T) => {
+    setValue(newValue);
+    localStorage.setItem(key, JSON.stringify(newValue));
+  };
+
+  return [value, setStoredValue];
+}
+
 const MASTERPIECE_LABELS = ['masterpiece', 'best_quality', 'highres', 'ultra-detailed', 'ultra_detailed', 'amazing_quality'];
+const BREAST_TAGS = ['breasts', 'flat_chest', 'small_breasts', 'medium_breasts', 'large_breasts', 'huge_breasts', 'gigantic_breasts'];
+const BREAST_SIZES = ['flat', 'small', 'medium', 'large', 'huge', 'gigantic'];
 
 const App: React.FC = () => {
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [isDarkMode, setIsDarkMode] = useLocalStorage('imagedna:darkMode', true);
   const [state, setState] = useState<AppState>(AppState.IDLE);
   const [image, setImage] = useState<string | null>(null);
   const [rawResultTags, setRawResultTags] = useState<Tag[]>([]);
-  const [threshold, setThreshold] = useState(0.35);
-  const [negativeTags, setNegativeTags] = useState("");
-  const [includeMasterpiece, setIncludeMasterpiece] = useState(false);
+  const [threshold, setThreshold] = useLocalStorage('imagedna:threshold', 0.35);
+  const [negativeTags, setNegativeTags] = useLocalStorage('imagedna:negativeTags', '');
+  const [includeMasterpiece, setIncludeMasterpiece] = useLocalStorage('imagedna:includeMasterpiece', false);
+  const [useUnderscores, setUseUnderscores] = useLocalStorage('imagedna:useUnderscores', true);
+  const [breastSize, setBreastSize] = useLocalStorage('imagedna:breastSize', 'medium');
   const [copied, setCopied] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -61,6 +85,19 @@ const App: React.FC = () => {
     // Sort by confidence descending
     filtered.sort((a, b) => b.confidence - a.confidence);
 
+    // Consolidate breast tags into user-selected size
+    const hasBreastTag = filtered.some(tag => BREAST_TAGS.includes(tag.label.toLowerCase()));
+    if (hasBreastTag) {
+      const firstIdx = filtered.findIndex(tag => BREAST_TAGS.includes(tag.label.toLowerCase()));
+      const maxConfidence = filtered[firstIdx].confidence;
+      filtered = filtered.filter(tag => !BREAST_TAGS.includes(tag.label.toLowerCase()));
+      filtered.splice(firstIdx, 0, {
+        label: breastSize === 'flat' ? 'flat_chest' : `${breastSize}_breasts`,
+        confidence: maxConfidence,
+        category: 'general' as const
+      });
+    }
+
     // Prepend masterpiece tags if toggle is on
     if (includeMasterpiece) {
       filtered = [
@@ -72,15 +109,18 @@ const App: React.FC = () => {
       ];
     }
 
-    // Generate the raw prompt string
-    const rawPrompt = filtered.map(t => t.label).join(', ');
+    // Generate the raw prompt string, normalizing word separators
+    const rawPrompt = filtered.map(t =>
+      useUnderscores ? t.label.replace(/ /g, '_') : t.label.replace(/_/g, ' ')
+    ).join(', ');
 
     return {
       tags: filtered,
       rawPrompt: rawPrompt,
-      rating: 'General'
+      rating: 'General',
+      hasBreastTag
     };
-  }, [rawResultTags, threshold, negativeTags, state, includeMasterpiece]);
+  }, [rawResultTags, threshold, negativeTags, state, includeMasterpiece, useUnderscores, breastSize]);
 
   const handleInterrogate = async (file: File) => {
     setState(AppState.INTERROGATING);
@@ -269,13 +309,56 @@ const App: React.FC = () => {
                         <p className="text-[10px] text-zinc-400 dark:text-zinc-500">Shows high-quality booru labels in the grid and appends to copy output.</p>
                       </div>
                     </div>
-                    <button 
+                    <button
                       onClick={() => setIncludeMasterpiece(!includeMasterpiece)}
                       className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${includeMasterpiece ? 'bg-indigo-600' : 'bg-zinc-200 dark:bg-zinc-700'}`}
                     >
                       <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${includeMasterpiece ? 'translate-x-5' : 'translate-x-0'}`} />
                     </button>
                   </div>
+
+                  {/* Underscore Toggle */}
+                  <div className="mt-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-sky-500/10 p-2 rounded-lg">
+                        <Type className="w-4 h-4 text-sky-500" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">Use Underscores</p>
+                        <p className="text-[10px] text-zinc-400 dark:text-zinc-500">Join multi-word labels with _ instead of spaces.</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setUseUnderscores(!useUnderscores)}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${useUnderscores ? 'bg-indigo-600' : 'bg-zinc-200 dark:bg-zinc-700'}`}
+                    >
+                      <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${useUnderscores ? 'translate-x-5' : 'translate-x-0'}`} />
+                    </button>
+                  </div>
+
+                  {/* Breast Size Dropdown */}
+                  {result.hasBreastTag && (
+                    <div className="mt-4 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="bg-rose-500/10 p-2 rounded-lg">
+                          <Sliders className="w-4 h-4 text-rose-500" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">Breast Size</p>
+                          <p className="text-[10px] text-zinc-400 dark:text-zinc-500">Consolidate detected breast tags into one.</p>
+                        </div>
+                      </div>
+                      <select
+                        value={breastSize}
+                        onChange={(e) => setBreastSize(e.target.value)}
+                        className="bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-sm font-medium text-zinc-700 dark:text-zinc-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 cursor-pointer"
+                      >
+                        {BREAST_SIZES.map(size => (
+                          <option key={size} value={size}>{size === 'flat' ? 'Flat chest' : size.charAt(0).toUpperCase() + size.slice(1)}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
 
               </div>
