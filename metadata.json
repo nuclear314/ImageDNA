@@ -1,0 +1,7 @@
+{
+  "name": "ImageDNA: WD14 Prompt Architect",
+  "description": "A high-fidelity UX prototype for image-to-prompt interrogation using the WD14 tagging model. Features categorized tag outputs, confidence thresholds, and AI-powered prompt refinement.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
