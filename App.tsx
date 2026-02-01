@@ -266,7 +266,7 @@ const App: React.FC = () => {
                   <Zap className="w-10 h-10 text-zinc-300 dark:text-zinc-700" />
                 </div>
                 <h3 className="text-xl font-medium text-zinc-700 dark:text-zinc-300 mb-2">Ready for Interrogation</h3>
-                <p className="max-w-xs">Upload an image on the left to extract prompt DNA with SmilingWolf's WD14 model.</p>
+                <p className="max-w-xs">Upload an image on the left to extract prompt DNA.</p>
               </div>
             )}
 
@@ -378,13 +378,10 @@ const App: React.FC = () => {
       <footer className="fixed bottom-0 left-0 right-0 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border-t border-zinc-200 dark:border-zinc-800 p-4 z-50">
         <div className="max-w-6xl mx-auto flex items-center justify-between text-xs text-zinc-500">
           <div className="flex items-center gap-4">
-            <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> Model: WD14-ViT v2</span>
+            <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> Model: WD EVA02 large</span>
             <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-indigo-500"></div> Engine: ONNX Runtime</span>
           </div>
           <div className="flex items-center gap-4">
-            <a href="#" className="hover:text-zinc-800 dark:hover:text-zinc-300 transition-colors underline decoration-zinc-200 dark:decoration-zinc-800">SmilingWolf Dataset</a>
-            <a href="#" className="hover:text-zinc-800 dark:hover:text-zinc-300 transition-colors underline decoration-zinc-200 dark:decoration-zinc-800">TOS</a>
-            <span className="text-zinc-200 dark:text-zinc-700">|</span>
             <span>ImageDNA © 2026</span>
           </div>
         </div>

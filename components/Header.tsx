@@ -27,9 +27,7 @@ const Header: React.FC<HeaderProps> = ({ isDarkMode, setIsDarkMode }) => {
         
         <div className="flex items-center gap-4 md:gap-6">
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-zinc-500 dark:text-zinc-400">
-            <a href="#" className="hover:text-indigo-600 dark:hover:text-white transition-colors">Documentation</a>
-            <a href="#" className="hover:text-indigo-600 dark:hover:text-white transition-colors">API</a>
-            <a href="#" className="hover:text-indigo-600 dark:hover:text-white transition-colors">Models</a>
+            <a href="https://github.com/nuclear314/ImageDNA/blob/main/README.md" className="hover:text-indigo-600 dark:hover:text-white transition-colors">Documentation</a>
           </nav>
           
           <div className="flex items-center gap-3">
@@ -41,7 +39,7 @@ const Header: React.FC<HeaderProps> = ({ isDarkMode, setIsDarkMode }) => {
               {isDarkMode ? <Sun className="w-4.5 h-4.5" /> : <Moon className="w-4.5 h-4.5" />}
             </button>
             <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-800"></div>
-            <a href="https://github.com" target="_blank" rel="noreferrer" className="text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors">
+            <a href="https://github.com/nuclear314/ImageDNA" target="_blank" rel="noreferrer" className="text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors">
               <Github className="w-5 h-5" />
             </a>
           </div>

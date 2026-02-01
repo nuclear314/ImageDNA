@@ -1,20 +1,60 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# ImageDNA
 
-# Run and deploy your AI Studio app
+A web application for extracting image tags and generating prompts using SmilingWolf's WD14 tagger model. Upload an image and get a list of descriptive tags that can be used as prompts for image generation models.
 
-This contains everything you need to run your app locally.
+## What the Tool Does
 
-View your app in AI Studio: https://ai.studio/apps/drive/1Q_IuWakuJl578DDfpWUaM50lWFvhM151
+ImageDNA uses the [WD14 tagger](https://huggingface.co/SmilingWolf/wd-eva02-large-tagger-v3) to analyze images and extract descriptive tags. The tool:
 
-## Run Locally
+- **Extracts tags from images** - Analyzes uploaded images using a pre-trained ONNX model to identify general and character tags
+- **Generates copy-ready prompts** - Outputs tags as a comma-separated prompt string ready for use with image generation models
+- **Provides filtering controls** - Adjust confidence threshold, exclude specific tags, and customize output formatting
+- **Offers convenience options** - Toggle masterpiece quality tags, switch between underscores and spaces, and consolidate similar tags
 
-**Prerequisites:**  Node.js
+The frontend is built with React and the backend uses Flask with ONNX Runtime for model inference. The WD14 model is automatically downloaded from Hugging Face on first run.
 
+## How to Run Locally
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+**Prerequisites:** Node.js and Python 3.10+
+
+1. Install frontend dependencies:
+   ```bash
+   npm install
+   ```
+
+2. Install Python dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. Build the frontend:
+   ```bash
+   npm run build
+   ```
+
+4. Start the server:
+   ```bash
+   python server.py
+   ```
+
+5. Open http://localhost:5000 in your browser
+
+For development with hot reload, run the Vite dev server (`npm run dev`) and the Flask server separately, then access the Vite dev server URL.
+
+## How to Build the Docker Image
+
+The Dockerfile uses a multi-stage build to create a production-ready image:
+
+1. Build the image:
+   ```bash
+   docker build -t imagedna .
+   ```
+
+2. Run the container:
+   ```bash
+   docker run -p 5000:5000 imagedna
+   ```
+
+3. Open http://localhost:5000 in your browser
+
+The container exposes port 5000 and will download the WD14 model from Hugging Face on first startup.
