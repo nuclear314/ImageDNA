@@ -15,7 +15,7 @@ The frontend is built with React and the backend uses Flask with ONNX Runtime fo
 
 ## How to Run Locally
 
-**Prerequisites:** Node.js and Python 3.10+
+**Prerequisites:** Node.js 24+ and Python 3.12+
 
 1. Install frontend dependencies:
    ```bash
