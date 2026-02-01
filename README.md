@@ -13,7 +13,16 @@ ImageDNA uses the [WD14 tagger](https://huggingface.co/SmilingWolf/wd-eva02-larg
 
 The frontend is built with React and the backend uses Flask with ONNX Runtime for model inference. The WD14 model is automatically downloaded from Hugging Face on first run.
 
-## How to Run Locally
+## How to run locally (Standalone)
+You can use the pre-build docker image hosted on [Docker Hub](https://hub.docker.com/r/nuclear314/image-dna) if you want to just run the application and don't require the development files
+
+**Prerequisites:** Docker
+
+```bash
+docker run -d -p 5000:5000 nuclear314/image-dna:1.0
+```
+
+## How to run locally (Development)
 
 **Prerequisites:** Node.js 24+ and Python 3.12+
 
@@ -41,7 +50,7 @@ The frontend is built with React and the backend uses Flask with ONNX Runtime fo
 
 For development with hot reload, run the Vite dev server (`npm run dev`) and the Flask server separately, then access the Vite dev server URL.
 
-## How to Build the Docker Image
+## How to build the docker image
 
 The Dockerfile uses a multi-stage build to create a production-ready image:
 
