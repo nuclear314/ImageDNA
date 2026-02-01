@@ -1,13 +1,13 @@
 # ImageDNA
 
-A web application for extracting image tags and generating prompts using SmilingWolf's WD14 tagger model. Upload an image and get a list of descriptive tags that can be used as prompts for image generation models.
+A web application for extracting image tags and generating prompts using WD14 tagger models. Upload an image and get a list of tags that can be used as prompts for image generation models.
 
 ## What the Tool Does
 
-ImageDNA uses the [WD14 tagger](https://huggingface.co/SmilingWolf/wd-eva02-large-tagger-v3) to analyze images and extract descriptive tags. The tool:
+ImageDNA uses the [WD14 tagger model](https://huggingface.co/SmilingWolf/wd-eva02-large-tagger-v3) to analyze images and extract tags. The tool:
 
-- **Extracts tags from images** - Analyzes uploaded images using a pre-trained ONNX model to identify general and character tags
-- **Generates copy-ready prompts** - Outputs tags as a comma-separated prompt string ready for use with image generation models
+- **Extracts tags from images** - Analyzes uploaded images using a pre-trained ONNX model to identify tags
+- **Generates copy-ready prompts** - Outputs tags as a comma-separated prompt string ready for use with image generation
 - **Provides filtering controls** - Adjust confidence threshold, exclude specific tags, and customize output formatting
 - **Offers convenience options** - Toggle masterpiece quality tags, switch between underscores and spaces, and consolidate similar tags
 
