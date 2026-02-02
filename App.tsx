@@ -56,6 +56,7 @@ const App: React.FC = () => {
   const [breastSize, setBreastSize] = useLocalStorage('imagedna:breastSize', 'medium');
   const [consolidateBreasts, setConsolidateBreasts] = useLocalStorage('imagedna:consolidateBreasts', false);
   const [useDAMode, setUseDAMode] = useLocalStorage('imagedna:useDAMode', false);
+  const [daTagLimit, setDaTagLimit] = useLocalStorage('imagedna:daTagLimit', 30);
   const [copied, setCopied] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -119,13 +120,13 @@ const App: React.FC = () => {
       useUnderscores ? t.label.replace(/ /g, '_') : t.label.replace(/_/g, ' ')
     ).join(', ');
 
-    // Generate DeviantArt-compatible tags: lowercase, no spaces, no underscores, hyphens become underscores, max 30
+    // Generate DeviantArt-compatible tags: lowercase, no spaces, no underscores, hyphens become underscores
     const deviantArtPrompt = filtered
       .filter(tag => {
         const normalized = tag.label.toLowerCase().replace(/ /g, '_');
         return !DA_EXCLUDED_TAGS.includes(normalized) && !normalized.endsWith('_background');
       })
-      .slice(0, 30)
+      .slice(0, daTagLimit)
       .map(tag => tag.label.replace(/_/g, '').replace(/-/g, '_').replace(/\s/g, '').toLowerCase())
       .join(' ');
 
@@ -136,7 +137,7 @@ const App: React.FC = () => {
       rating: 'General',
       hasBreastTag
     };
-  }, [rawResultTags, threshold, negativeTags, state, includeMasterpiece, masterpieceTags, useUnderscores, breastSize, consolidateBreasts]);
+  }, [rawResultTags, threshold, negativeTags, state, includeMasterpiece, masterpieceTags, useUnderscores, breastSize, consolidateBreasts, daTagLimit]);
 
   const handleInterrogate = async (file: File) => {
     setState(AppState.INTERROGATING);
@@ -230,6 +231,8 @@ const App: React.FC = () => {
         setConsolidateBreasts={setConsolidateBreasts}
         useDAMode={useDAMode}
         setUseDAMode={setUseDAMode}
+        daTagLimit={daTagLimit}
+        setDaTagLimit={setDaTagLimit}
       />
       
       <main className="max-w-6xl mx-auto px-4 py-8 pb-24">
@@ -348,7 +351,7 @@ const App: React.FC = () => {
                       title={useDAMode ? 'DeviantArt format: lowercase, no spaces, max 30 tags' : 'Copy all tags'}
                     >
                       {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                      {copied ? 'Copied' : useDAMode ? `Copy Tags (DA Mode)` : 'Copy All Tags'}
+                      {copied ? 'Copied' : useDAMode ? `Copy Tags` : 'Copy Tags'}
                     </button>
                   </div>
 
