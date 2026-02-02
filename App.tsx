@@ -51,9 +51,9 @@ const App: React.FC = () => {
   const [negativeTags, setNegativeTags] = useLocalStorage('imagedna:negativeTags', '');
   const [includeMasterpiece, setIncludeMasterpiece] = useLocalStorage('imagedna:includeMasterpiece', false);
   const [masterpieceTags, setMasterpieceTags] = useLocalStorage('imagedna:masterpieceTags', DEFAULT_MASTERPIECE_TAGS);
-  const [useUnderscores, setUseUnderscores] = useLocalStorage('imagedna:useUnderscores', true);
+  const [useUnderscores, setUseUnderscores] = useLocalStorage('imagedna:useUnderscores', false);
   const [breastSize, setBreastSize] = useLocalStorage('imagedna:breastSize', 'medium');
-  const [consolidateBreasts, setConsolidateBreasts] = useLocalStorage('imagedna:consolidateBreasts', true);
+  const [consolidateBreasts, setConsolidateBreasts] = useLocalStorage('imagedna:consolidateBreasts', false);
   const [copied, setCopied] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);

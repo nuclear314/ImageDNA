@@ -1,5 +1,5 @@
-import React from 'react';
-import { X, Star, Type, Sliders } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Star, Type, Sliders, RotateCcw, AlertTriangle } from 'lucide-react';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -28,6 +28,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   consolidateBreasts,
   setConsolidateBreasts,
 }) => {
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+
   if (!isOpen) return null;
 
   return (
@@ -123,6 +125,44 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${consolidateBreasts ? 'translate-x-5' : 'translate-x-0'}`} />
             </button>
           </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-zinc-200 dark:border-zinc-800">
+          {!showResetConfirm ? (
+            <button
+              onClick={() => setShowResetConfirm(true)}
+              className="flex items-center gap-2 text-sm text-zinc-500 hover:text-red-500 dark:text-zinc-400 dark:hover:text-red-400 transition-colors"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Reset all settings to defaults
+            </button>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-start gap-2 text-amber-600 dark:text-amber-400">
+                <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <p className="text-sm">This will reset all settings to their defaults. This action cannot be undone.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const keys = Object.keys(localStorage).filter(k => k.startsWith('imagedna:'));
+                    keys.forEach(k => localStorage.removeItem(k));
+                    window.location.reload();
+                  }}
+                  className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  Reset Settings
+                </button>
+                <button
+                  onClick={() => setShowResetConfirm(false)}
+                  className="px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-sm font-medium rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
