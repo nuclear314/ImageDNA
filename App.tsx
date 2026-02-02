@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Image as ImageIcon,
   Copy,
@@ -57,6 +57,7 @@ const App: React.FC = () => {
   const [copied, setCopied] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isDarkMode) {
@@ -179,8 +180,27 @@ const App: React.FC = () => {
     setIncludeMasterpiece(false);
   };
 
+  const handleChangeImage = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      handleFileUpload(e.target.files[0]);
+    }
+    // Reset input value so same file can be selected again
+    e.target.value = '';
+  };
+
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-[#09090b] text-zinc-900 dark:text-zinc-100 selection:bg-indigo-500/30">
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileInputChange}
+        className="hidden"
+        accept="image/*"
+      />
       <Header isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} onSettingsClick={() => setIsSettingsOpen(true)} />
 
       <SettingsModal
@@ -256,7 +276,7 @@ const App: React.FC = () => {
                     {isDragOver ? (
                       <span className="bg-indigo-600 text-white px-4 py-2 rounded-full font-medium shadow-lg">Drop to replace</span>
                     ) : (
-                      <button onClick={reset} className="bg-white text-black px-4 py-2 rounded-full font-medium shadow-lg transform translate-y-2 group-hover:translate-y-0 transition-all">
+                      <button onClick={handleChangeImage} className="bg-white text-black px-4 py-2 rounded-full font-medium shadow-lg transform translate-y-2 group-hover:translate-y-0 transition-all">
                         Change Image
                       </button>
                     )}
