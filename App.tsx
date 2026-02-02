@@ -52,6 +52,7 @@ const App: React.FC = () => {
   const [includeMasterpiece, setIncludeMasterpiece] = useLocalStorage('imagedna:includeMasterpiece', false);
   const [useUnderscores, setUseUnderscores] = useLocalStorage('imagedna:useUnderscores', true);
   const [breastSize, setBreastSize] = useLocalStorage('imagedna:breastSize', 'medium');
+  const [consolidateBreasts, setConsolidateBreasts] = useLocalStorage('imagedna:consolidateBreasts', true);
   const [copied, setCopied] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -85,9 +86,9 @@ const App: React.FC = () => {
     // Sort by confidence descending
     filtered.sort((a, b) => b.confidence - a.confidence);
 
-    // Consolidate breast tags into user-selected size
+    // Consolidate breast tags into user-selected size (if enabled)
     const hasBreastTag = filtered.some(tag => BREAST_TAGS.includes(tag.label.toLowerCase()));
-    if (hasBreastTag) {
+    if (consolidateBreasts && hasBreastTag) {
       const firstIdx = filtered.findIndex(tag => BREAST_TAGS.includes(tag.label.toLowerCase()));
       const maxConfidence = filtered[firstIdx].confidence;
       filtered = filtered.filter(tag => !BREAST_TAGS.includes(tag.label.toLowerCase()));
@@ -120,7 +121,7 @@ const App: React.FC = () => {
       rating: 'General',
       hasBreastTag
     };
-  }, [rawResultTags, threshold, negativeTags, state, includeMasterpiece, useUnderscores, breastSize]);
+  }, [rawResultTags, threshold, negativeTags, state, includeMasterpiece, useUnderscores, breastSize, consolidateBreasts]);
 
   const handleInterrogate = async (file: File) => {
     setState(AppState.INTERROGATING);
@@ -336,7 +337,7 @@ const App: React.FC = () => {
                     </button>
                   </div>
 
-                  {/* Breast Size Dropdown */}
+                  {/* Breast Tag Consolidation Toggle + Size Dropdown */}
                   {result.hasBreastTag && (
                     <div className="mt-4 flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -344,19 +345,29 @@ const App: React.FC = () => {
                           <Sliders className="w-4 h-4 text-rose-500" />
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">Breast Size</p>
-                          <p className="text-[10px] text-zinc-400 dark:text-zinc-500">Consolidate detected breast tags into one.</p>
+                          <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">Consolidate Breast Tags</p>
+                          <p className="text-[10px] text-zinc-400 dark:text-zinc-500">Replace detected breast tags with a single selected size.</p>
                         </div>
                       </div>
-                      <select
-                        value={breastSize}
-                        onChange={(e) => setBreastSize(e.target.value)}
-                        className="bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-sm font-medium text-zinc-700 dark:text-zinc-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 cursor-pointer"
-                      >
-                        {BREAST_SIZES.map(size => (
-                          <option key={size} value={size}>{size === 'flat' ? 'Flat chest' : size.charAt(0).toUpperCase() + size.slice(1)}</option>
-                        ))}
-                      </select>
+                      <div className="flex items-center gap-3">
+                        {consolidateBreasts && (
+                          <select
+                            value={breastSize}
+                            onChange={(e) => setBreastSize(e.target.value)}
+                            className="bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-sm font-medium text-zinc-700 dark:text-zinc-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 cursor-pointer"
+                          >
+                            {BREAST_SIZES.map(size => (
+                              <option key={size} value={size}>{size === 'flat' ? 'Flat chest' : size.charAt(0).toUpperCase() + size.slice(1)}</option>
+                            ))}
+                          </select>
+                        )}
+                        <button
+                          onClick={() => setConsolidateBreasts(!consolidateBreasts)}
+                          className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${consolidateBreasts ? 'bg-indigo-600' : 'bg-zinc-200 dark:bg-zinc-700'}`}
+                        >
+                          <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${consolidateBreasts ? 'translate-x-5' : 'translate-x-0'}`} />
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
