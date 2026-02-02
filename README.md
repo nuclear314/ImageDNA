@@ -19,7 +19,7 @@ You can use the pre-build docker image hosted on [Docker Hub](https://hub.docker
 **Prerequisites:** Docker
 
 ```bash
-docker run -d -p 5000:5000 nuclear314/image-dna:1.0
+docker run -d -p 5000:5000 nuclear314/image-dna:latest
 ```
 
 ## How to run locally (Development)
