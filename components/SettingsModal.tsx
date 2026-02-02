@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Star, Type, Sliders, RotateCcw, AlertTriangle } from 'lucide-react';
+import { X, Star, Type, Sliders, RotateCcw, AlertTriangle, Share2 } from 'lucide-react';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -13,6 +13,8 @@ interface SettingsModalProps {
   setUseUnderscores: (val: boolean) => void;
   consolidateBreasts: boolean;
   setConsolidateBreasts: (val: boolean) => void;
+  useDAMode: boolean;
+  setUseDAMode: (val: boolean) => void;
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -27,6 +29,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   setUseUnderscores,
   consolidateBreasts,
   setConsolidateBreasts,
+  useDAMode,
+  setUseDAMode,
 }) => {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
@@ -123,6 +127,25 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${consolidateBreasts ? 'bg-indigo-600' : 'bg-zinc-200 dark:bg-zinc-700'}`}
             >
               <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${consolidateBreasts ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
+          </div>
+
+          {/* DeviantArt Mode Toggle */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="bg-orange-500/10 p-2 rounded-lg">
+                <Share2 className="w-4 h-4 text-orange-500" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">DeviantArt Mode</p>
+                <p className="text-[10px] text-zinc-400 dark:text-zinc-500">Format tags for DeviantArt (lowercase, no spaces, max 30).</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setUseDAMode(!useDAMode)}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${useDAMode ? 'bg-orange-500' : 'bg-zinc-200 dark:bg-zinc-700'}`}
+            >
+              <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${useDAMode ? 'translate-x-5' : 'translate-x-0'}`} />
             </button>
           </div>
         </div>
