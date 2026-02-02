@@ -7,8 +7,6 @@ import {
   ChevronRight,
   Zap,
   Tag as TagIcon,
-  Star,
-  Type,
   Sliders
 } from 'lucide-react';
 import { AppState, Tag } from './types';
@@ -19,6 +17,7 @@ import Dropzone from './components/Dropzone';
 import TagGrid from './components/TagGrid';
 import SettingsPanel from './components/SettingsPanel';
 import ProcessingState from './components/ProcessingState';
+import SettingsModal from './components/SettingsModal';
 
 function useLocalStorage<T>(key: string, defaultValue: T): [T, (val: T) => void] {
   const [value, setValue] = useState<T>(() => {
@@ -39,6 +38,7 @@ function useLocalStorage<T>(key: string, defaultValue: T): [T, (val: T) => void]
 }
 
 const MASTERPIECE_LABELS = ['masterpiece', 'best_quality', 'highres', 'ultra-detailed', 'ultra_detailed', 'amazing_quality'];
+const DEFAULT_MASTERPIECE_TAGS = 'masterpiece, best quality, highres, ultra-detailed';
 const BREAST_TAGS = ['breasts', 'flat_chest', 'small_breasts', 'medium_breasts', 'large_breasts', 'huge_breasts', 'gigantic_breasts'];
 const BREAST_SIZES = ['flat', 'small', 'medium', 'large', 'huge', 'gigantic'];
 
@@ -50,11 +50,13 @@ const App: React.FC = () => {
   const [threshold, setThreshold] = useLocalStorage('imagedna:threshold', 0.35);
   const [negativeTags, setNegativeTags] = useLocalStorage('imagedna:negativeTags', '');
   const [includeMasterpiece, setIncludeMasterpiece] = useLocalStorage('imagedna:includeMasterpiece', false);
+  const [masterpieceTags, setMasterpieceTags] = useLocalStorage('imagedna:masterpieceTags', DEFAULT_MASTERPIECE_TAGS);
   const [useUnderscores, setUseUnderscores] = useLocalStorage('imagedna:useUnderscores', true);
   const [breastSize, setBreastSize] = useLocalStorage('imagedna:breastSize', 'medium');
   const [consolidateBreasts, setConsolidateBreasts] = useLocalStorage('imagedna:consolidateBreasts', true);
   const [copied, setCopied] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   useEffect(() => {
     if (isDarkMode) {
@@ -101,13 +103,12 @@ const App: React.FC = () => {
 
     // Prepend masterpiece tags if toggle is on
     if (includeMasterpiece) {
-      filtered = [
-        { label: 'masterpiece', confidence: 1, category: 'general' as const },
-        { label: 'best quality', confidence: 1, category: 'general' as const },
-        { label: 'highres', confidence: 1, category: 'general' as const },
-        { label: 'ultra-detailed', confidence: 1, category: 'general' as const },
-        ...filtered,
-      ];
+      const customTags = masterpieceTags
+        .split(',')
+        .map(t => t.trim())
+        .filter(t => t.length > 0)
+        .map(label => ({ label, confidence: 1, category: 'general' as const }));
+      filtered = [...customTags, ...filtered];
     }
 
     // Generate the raw prompt string, normalizing word separators
@@ -121,7 +122,7 @@ const App: React.FC = () => {
       rating: 'General',
       hasBreastTag
     };
-  }, [rawResultTags, threshold, negativeTags, state, includeMasterpiece, useUnderscores, breastSize, consolidateBreasts]);
+  }, [rawResultTags, threshold, negativeTags, state, includeMasterpiece, masterpieceTags, useUnderscores, breastSize, consolidateBreasts]);
 
   const handleInterrogate = async (file: File) => {
     setState(AppState.INTERROGATING);
@@ -180,7 +181,21 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-[#09090b] text-zinc-900 dark:text-zinc-100 selection:bg-indigo-500/30">
-      <Header isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+      <Header isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} onSettingsClick={() => setIsSettingsOpen(true)} />
+
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        includeMasterpiece={includeMasterpiece}
+        setIncludeMasterpiece={setIncludeMasterpiece}
+        masterpieceTags={masterpieceTags}
+        setMasterpieceTags={setMasterpieceTags}
+        defaultMasterpieceTags={DEFAULT_MASTERPIECE_TAGS}
+        useUnderscores={useUnderscores}
+        setUseUnderscores={setUseUnderscores}
+        consolidateBreasts={consolidateBreasts}
+        setConsolidateBreasts={setConsolidateBreasts}
+      />
       
       <main className="max-w-6xl mx-auto px-4 py-8 pb-24">
         {/* Step Indicator */}
@@ -299,75 +314,27 @@ const App: React.FC = () => {
 
                   <TagGrid tags={result.tags} />
 
-                  {/* Masterpiece Toggle in Output Panel */}
-                  <div className="mt-8 pt-6 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="bg-amber-500/10 p-2 rounded-lg">
-                        <Star className="w-4 h-4 text-amber-500" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">Append Masterpiece Tags</p>
-                        <p className="text-[10px] text-zinc-400 dark:text-zinc-500">Shows high-quality booru labels in the grid and appends to copy output.</p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setIncludeMasterpiece(!includeMasterpiece)}
-                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${includeMasterpiece ? 'bg-indigo-600' : 'bg-zinc-200 dark:bg-zinc-700'}`}
-                    >
-                      <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${includeMasterpiece ? 'translate-x-5' : 'translate-x-0'}`} />
-                    </button>
-                  </div>
-
-                  {/* Underscore Toggle */}
-                  <div className="mt-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="bg-sky-500/10 p-2 rounded-lg">
-                        <Type className="w-4 h-4 text-sky-500" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">Use Underscores</p>
-                        <p className="text-[10px] text-zinc-400 dark:text-zinc-500">Join multi-word labels with _ instead of spaces.</p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setUseUnderscores(!useUnderscores)}
-                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${useUnderscores ? 'bg-indigo-600' : 'bg-zinc-200 dark:bg-zinc-700'}`}
-                    >
-                      <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${useUnderscores ? 'translate-x-5' : 'translate-x-0'}`} />
-                    </button>
-                  </div>
-
-                  {/* Breast Tag Consolidation Toggle + Size Dropdown */}
-                  {result.hasBreastTag && (
-                    <div className="mt-4 flex items-center justify-between">
+                  {/* Breast Size Dropdown (shown when consolidation is enabled and breast tags detected) */}
+                  {consolidateBreasts && result.hasBreastTag && (
+                    <div className="mt-8 pt-6 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="bg-rose-500/10 p-2 rounded-lg">
                           <Sliders className="w-4 h-4 text-rose-500" />
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">Consolidate Breast Tags</p>
-                          <p className="text-[10px] text-zinc-400 dark:text-zinc-500">Replace detected breast tags with a single selected size.</p>
+                          <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">Breast Size</p>
+                          <p className="text-[10px] text-zinc-400 dark:text-zinc-500">Select size to replace detected breast tags.</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        {consolidateBreasts && (
-                          <select
-                            value={breastSize}
-                            onChange={(e) => setBreastSize(e.target.value)}
-                            className="bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-sm font-medium text-zinc-700 dark:text-zinc-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 cursor-pointer"
-                          >
-                            {BREAST_SIZES.map(size => (
-                              <option key={size} value={size}>{size === 'flat' ? 'Flat chest' : size.charAt(0).toUpperCase() + size.slice(1)}</option>
-                            ))}
-                          </select>
-                        )}
-                        <button
-                          onClick={() => setConsolidateBreasts(!consolidateBreasts)}
-                          className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${consolidateBreasts ? 'bg-indigo-600' : 'bg-zinc-200 dark:bg-zinc-700'}`}
-                        >
-                          <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${consolidateBreasts ? 'translate-x-5' : 'translate-x-0'}`} />
-                        </button>
-                      </div>
+                      <select
+                        value={breastSize}
+                        onChange={(e) => setBreastSize(e.target.value)}
+                        className="bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-sm font-medium text-zinc-700 dark:text-zinc-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 cursor-pointer"
+                      >
+                        {BREAST_SIZES.map(size => (
+                          <option key={size} value={size}>{size === 'flat' ? 'Flat chest' : size.charAt(0).toUpperCase() + size.slice(1)}</option>
+                        ))}
+                      </select>
                     </div>
                   )}
                 </div>

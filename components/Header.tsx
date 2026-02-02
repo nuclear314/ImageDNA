@@ -1,13 +1,14 @@
 
 import React from 'react';
-import { Fingerprint, Github, Sun, Moon } from 'lucide-react';
+import { Fingerprint, Github, Sun, Moon, Settings } from 'lucide-react';
 
 interface HeaderProps {
   isDarkMode: boolean;
   setIsDarkMode: (val: boolean) => void;
+  onSettingsClick: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ isDarkMode, setIsDarkMode }) => {
+const Header: React.FC<HeaderProps> = ({ isDarkMode, setIsDarkMode, onSettingsClick }) => {
   return (
     <header className="border-b border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-[#09090b]/50 backdrop-blur-md sticky top-0 z-50 transition-colors">
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -31,7 +32,14 @@ const Header: React.FC<HeaderProps> = ({ isDarkMode, setIsDarkMode }) => {
           </nav>
           
           <div className="flex items-center gap-3">
-            <button 
+            <button
+              onClick={onSettingsClick}
+              className="p-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-white transition-all border border-zinc-200 dark:border-zinc-700 shadow-sm"
+              title="Settings"
+            >
+              <Settings className="w-4.5 h-4.5" />
+            </button>
+            <button
               onClick={() => setIsDarkMode(!isDarkMode)}
               className="p-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-white transition-all border border-zinc-200 dark:border-zinc-700 shadow-sm"
               title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
