@@ -20,7 +20,7 @@ Click the **gear icon** in the top-right corner of the application to open the S
 - **Model Selection** - Choose which tagger model to use for analysis:
   - *EVA02 Large v3* (default) - Best accuracy
   - *MOAT v2* - Good balance of speed and accuracy
-  - *SwinV2 v2* - Fast and efficient
+  - *SwinV2 v3* - Fast and efficient
 
   Changing the model while an image is loaded will automatically re-run the tagging with the new model.
 
