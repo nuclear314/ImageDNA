@@ -41,11 +41,19 @@ const MASTERPIECE_LABELS = ['masterpiece', 'best_quality', 'highres', 'ultra-det
 const DEFAULT_MASTERPIECE_TAGS = 'masterpiece, best quality, highres, ultra-detailed';
 const BREAST_TAGS = ['breasts', 'flat_chest', 'small_breasts', 'medium_breasts', 'large_breasts', 'huge_breasts', 'gigantic_breasts'];
 const BREAST_SIZES = ['flat', 'small', 'medium', 'large', 'huge', 'gigantic'];
+const DA_EXCLUDED_TAGS = ['1girl', '1boy', 'solo', 'looking_at_viewer'];
+
+const TAGGER_MODELS = [
+  { id: 'SmilingWolf/wd-eva02-large-tagger-v3', name: 'EVA02 Large v3', description: 'Best accuracy (default)' },
+  { id: 'SmilingWolf/wd-v1-4-moat-tagger-v2', name: 'MOAT v2', description: 'Good balance of speed and accuracy' },
+  { id: 'SmilingWolf/wd-v1-4-swinv2-tagger-v2', name: 'SwinV2 v2', description: 'Fast and efficient' },
+] as const;
 
 const App: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useLocalStorage('imagedna:darkMode', true);
   const [state, setState] = useState<AppState>(AppState.IDLE);
   const [image, setImage] = useState<string | null>(null);
+  const [currentFile, setCurrentFile] = useState<File | null>(null);
   const [rawResultTags, setRawResultTags] = useState<Tag[]>([]);
   const [threshold, setThreshold] = useLocalStorage('imagedna:threshold', 0.35);
   const [negativeTags, setNegativeTags] = useLocalStorage('imagedna:negativeTags', '');
@@ -54,6 +62,9 @@ const App: React.FC = () => {
   const [useUnderscores, setUseUnderscores] = useLocalStorage('imagedna:useUnderscores', false);
   const [breastSize, setBreastSize] = useLocalStorage('imagedna:breastSize', 'medium');
   const [consolidateBreasts, setConsolidateBreasts] = useLocalStorage('imagedna:consolidateBreasts', false);
+  const [useDAMode, setUseDAMode] = useLocalStorage('imagedna:useDAMode', false);
+  const [daTagLimit, setDaTagLimit] = useLocalStorage('imagedna:daTagLimit', 30);
+  const [selectedModel, setSelectedModel] = useLocalStorage('imagedna:selectedModel', TAGGER_MODELS[0].id);
   const [copied, setCopied] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -66,6 +77,15 @@ const App: React.FC = () => {
       document.documentElement.classList.remove('dark');
     }
   }, [isDarkMode]);
+
+  // Re-run tagging when model changes and we have an image loaded
+  const previousModelRef = useRef(selectedModel);
+  useEffect(() => {
+    if (previousModelRef.current !== selectedModel && currentFile && (state === AppState.RESULT || state === AppState.ERROR)) {
+      handleInterrogate(currentFile);
+    }
+    previousModelRef.current = selectedModel;
+  }, [selectedModel, currentFile, state]);
 
   // Derive filtered tags and prompt based on settings
   const result = useMemo(() => {
@@ -117,19 +137,31 @@ const App: React.FC = () => {
       useUnderscores ? t.label.replace(/ /g, '_') : t.label.replace(/_/g, ' ')
     ).join(', ');
 
+    // Generate DeviantArt-compatible tags: lowercase, no spaces, no underscores, hyphens become underscores
+    const deviantArtPrompt = filtered
+      .filter(tag => {
+        const normalized = tag.label.toLowerCase().replace(/ /g, '_');
+        return !DA_EXCLUDED_TAGS.includes(normalized) && !normalized.endsWith('_background');
+      })
+      .slice(0, daTagLimit)
+      .map(tag => tag.label.replace(/_/g, '').replace(/-/g, '_').replace(/\s/g, '').toLowerCase())
+      .join(' ');
+
     return {
       tags: filtered,
       rawPrompt: rawPrompt,
+      deviantArtPrompt: deviantArtPrompt,
       rating: 'General',
       hasBreastTag
     };
-  }, [rawResultTags, threshold, negativeTags, state, includeMasterpiece, masterpieceTags, useUnderscores, breastSize, consolidateBreasts]);
+  }, [rawResultTags, threshold, negativeTags, state, includeMasterpiece, masterpieceTags, useUnderscores, breastSize, consolidateBreasts, daTagLimit]);
 
   const handleInterrogate = async (file: File) => {
     setState(AppState.INTERROGATING);
     try {
       const formData = new FormData();
       formData.append('image', file);
+      formData.append('model', selectedModel);
 
       const response = await fetch('/api/tag', {
         method: 'POST',
@@ -158,6 +190,7 @@ const App: React.FC = () => {
   };
 
   const handleFileUpload = (file: File) => {
+    setCurrentFile(file);
     const reader = new FileReader();
     reader.onload = (e) => {
       const dataUrl = e.target?.result as string;
@@ -176,6 +209,7 @@ const App: React.FC = () => {
   const reset = () => {
     setState(AppState.IDLE);
     setImage(null);
+    setCurrentFile(null);
     setRawResultTags([]);
     setIncludeMasterpiece(false);
   };
@@ -215,6 +249,13 @@ const App: React.FC = () => {
         setUseUnderscores={setUseUnderscores}
         consolidateBreasts={consolidateBreasts}
         setConsolidateBreasts={setConsolidateBreasts}
+        useDAMode={useDAMode}
+        setUseDAMode={setUseDAMode}
+        daTagLimit={daTagLimit}
+        setDaTagLimit={setDaTagLimit}
+        selectedModel={selectedModel}
+        setSelectedModel={setSelectedModel}
+        taggerModels={TAGGER_MODELS}
       />
       
       <main className="max-w-6xl mx-auto px-4 py-8 pb-24">
@@ -321,14 +362,19 @@ const App: React.FC = () => {
                         {result.tags.length} labels found
                       </span>
                     </h2>
-                    <button 
-                      onClick={() => handleCopy(result.rawPrompt)}
+                    <button
+                      onClick={() => handleCopy(useDAMode ? result.deviantArtPrompt : result.rawPrompt)}
                       className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                        copied ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/50' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-500/20'
+                        copied
+                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/50'
+                          : useDAMode
+                            ? 'bg-orange-500 text-white hover:bg-orange-600 shadow-lg shadow-orange-500/20'
+                            : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-500/20'
                       }`}
+                      title={useDAMode ? 'DeviantArt format: lowercase, no spaces, max 30 tags' : 'Copy all tags'}
                     >
                       {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                      {copied ? 'Copied' : 'Copy All Tags'}
+                      {copied ? 'Copied' : useDAMode ? `Copy Tags` : 'Copy Tags'}
                     </button>
                   </div>
 
@@ -376,7 +422,7 @@ const App: React.FC = () => {
       <footer className="fixed bottom-0 left-0 right-0 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border-t border-zinc-200 dark:border-zinc-800 p-4 z-50">
         <div className="max-w-6xl mx-auto flex items-center justify-between text-xs text-zinc-500">
           <div className="flex items-center gap-4">
-            <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> Model: WD EVA02 large</span>
+            <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> Model: {TAGGER_MODELS.find(m => m.id === selectedModel)?.name ?? 'Unknown'}</span>
             <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-indigo-500"></div> Engine: ONNX Runtime</span>
           </div>
           <div className="flex items-center gap-4">
