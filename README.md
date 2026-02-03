@@ -13,6 +13,24 @@ ImageDNA uses the [WD14 tagger model](https://huggingface.co/SmilingWolf/wd-eva0
 
 The frontend is built with React and the backend uses Flask with ONNX Runtime for model inference. The WD14 model is automatically downloaded from Hugging Face on first run.
 
+## Settings
+
+Click the **gear icon** in the top-right corner of the application to open the Settings menu. The following options are available:
+
+- **Model Selection** - Choose which tagger model to use for analysis:
+  - *EVA02 Large v3* (default) - Best accuracy
+  - *MOAT v2* - Good balance of speed and accuracy
+  - *SwinV2 v2* - Fast and efficient
+
+  Changing the model while an image is loaded will automatically re-run the tagging with the new model.
+
+- **DeviantArt Mode** - When enabled, formats tags specifically for DeviantArt submissions:
+  - Converts tags to lowercase
+  - Removes spaces and replaces hyphens with underscores
+  - Provides a separate "Copy DA Tags" button
+
+- **DA Tag Limit** (visible when DeviantArt Mode is enabled) - A slider to set the maximum number of tags to copy (5-30). DeviantArt has a limit of 30 tags per submission.
+
 ## How to run locally (Standalone)
 You can use the pre-build docker image hosted on [Docker Hub](https://hub.docker.com/r/nuclear314/image-dna) if you want to just run the application and don't require the development files
 

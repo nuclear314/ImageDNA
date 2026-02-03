@@ -46,7 +46,7 @@ const DA_EXCLUDED_TAGS = ['1girl', '1boy', 'solo', 'looking_at_viewer'];
 const TAGGER_MODELS = [
   { id: 'SmilingWolf/wd-eva02-large-tagger-v3', name: 'EVA02 Large v3', description: 'Best accuracy (default)' },
   { id: 'SmilingWolf/wd-v1-4-moat-tagger-v2', name: 'MOAT v2', description: 'Good balance of speed and accuracy' },
-  { id: 'SmilingWolf/wd-v1-4-swinv2-tagger-v2', name: 'SwinV2 v2', description: 'Fast and efficient' },
+  { id: 'SmilingWolf/wd-swinv2-tagger-v3', name: 'SwinV2 v3', description: 'Fast and efficient' },
 ] as const;
 
 const App: React.FC = () => {
