@@ -43,10 +43,17 @@ const BREAST_TAGS = ['breasts', 'flat_chest', 'small_breasts', 'medium_breasts',
 const BREAST_SIZES = ['flat', 'small', 'medium', 'large', 'huge', 'gigantic'];
 const DA_EXCLUDED_TAGS = ['1girl', '1boy', 'solo', 'looking_at_viewer'];
 
+const TAGGER_MODELS = [
+  { id: 'SmilingWolf/wd-eva02-large-tagger-v3', name: 'EVA02 Large v3', description: 'Best accuracy (default)' },
+  { id: 'SmilingWolf/wd-v1-4-moat-tagger-v2', name: 'MOAT v2', description: 'Good balance of speed and accuracy' },
+  { id: 'SmilingWolf/wd-v1-4-swinv2-tagger-v2', name: 'SwinV2 v2', description: 'Fast and efficient' },
+] as const;
+
 const App: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useLocalStorage('imagedna:darkMode', true);
   const [state, setState] = useState<AppState>(AppState.IDLE);
   const [image, setImage] = useState<string | null>(null);
+  const [currentFile, setCurrentFile] = useState<File | null>(null);
   const [rawResultTags, setRawResultTags] = useState<Tag[]>([]);
   const [threshold, setThreshold] = useLocalStorage('imagedna:threshold', 0.35);
   const [negativeTags, setNegativeTags] = useLocalStorage('imagedna:negativeTags', '');
@@ -57,6 +64,7 @@ const App: React.FC = () => {
   const [consolidateBreasts, setConsolidateBreasts] = useLocalStorage('imagedna:consolidateBreasts', false);
   const [useDAMode, setUseDAMode] = useLocalStorage('imagedna:useDAMode', false);
   const [daTagLimit, setDaTagLimit] = useLocalStorage('imagedna:daTagLimit', 30);
+  const [selectedModel, setSelectedModel] = useLocalStorage('imagedna:selectedModel', TAGGER_MODELS[0].id);
   const [copied, setCopied] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -69,6 +77,15 @@ const App: React.FC = () => {
       document.documentElement.classList.remove('dark');
     }
   }, [isDarkMode]);
+
+  // Re-run tagging when model changes and we have an image loaded
+  const previousModelRef = useRef(selectedModel);
+  useEffect(() => {
+    if (previousModelRef.current !== selectedModel && currentFile && (state === AppState.RESULT || state === AppState.ERROR)) {
+      handleInterrogate(currentFile);
+    }
+    previousModelRef.current = selectedModel;
+  }, [selectedModel, currentFile, state]);
 
   // Derive filtered tags and prompt based on settings
   const result = useMemo(() => {
@@ -144,6 +161,7 @@ const App: React.FC = () => {
     try {
       const formData = new FormData();
       formData.append('image', file);
+      formData.append('model', selectedModel);
 
       const response = await fetch('/api/tag', {
         method: 'POST',
@@ -172,6 +190,7 @@ const App: React.FC = () => {
   };
 
   const handleFileUpload = (file: File) => {
+    setCurrentFile(file);
     const reader = new FileReader();
     reader.onload = (e) => {
       const dataUrl = e.target?.result as string;
@@ -190,6 +209,7 @@ const App: React.FC = () => {
   const reset = () => {
     setState(AppState.IDLE);
     setImage(null);
+    setCurrentFile(null);
     setRawResultTags([]);
     setIncludeMasterpiece(false);
   };
@@ -233,6 +253,9 @@ const App: React.FC = () => {
         setUseDAMode={setUseDAMode}
         daTagLimit={daTagLimit}
         setDaTagLimit={setDaTagLimit}
+        selectedModel={selectedModel}
+        setSelectedModel={setSelectedModel}
+        taggerModels={TAGGER_MODELS}
       />
       
       <main className="max-w-6xl mx-auto px-4 py-8 pb-24">
@@ -399,7 +422,7 @@ const App: React.FC = () => {
       <footer className="fixed bottom-0 left-0 right-0 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border-t border-zinc-200 dark:border-zinc-800 p-4 z-50">
         <div className="max-w-6xl mx-auto flex items-center justify-between text-xs text-zinc-500">
           <div className="flex items-center gap-4">
-            <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> Model: WD EVA02 large</span>
+            <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> Model: {TAGGER_MODELS.find(m => m.id === selectedModel)?.name ?? 'Unknown'}</span>
             <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-indigo-500"></div> Engine: ONNX Runtime</span>
           </div>
           <div className="flex items-center gap-4">

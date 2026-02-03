@@ -1,5 +1,11 @@
 import React, { useState } from 'react';
-import { X, Star, Type, Sliders, RotateCcw, AlertTriangle, Share2 } from 'lucide-react';
+import { X, Star, Type, Sliders, RotateCcw, AlertTriangle, Share2, Cpu } from 'lucide-react';
+
+interface TaggerModel {
+  id: string;
+  name: string;
+  description: string;
+}
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -17,6 +23,9 @@ interface SettingsModalProps {
   setUseDAMode: (val: boolean) => void;
   daTagLimit: number;
   setDaTagLimit: (val: number) => void;
+  selectedModel: string;
+  setSelectedModel: (val: string) => void;
+  taggerModels: readonly TaggerModel[];
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -35,6 +44,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   setUseDAMode,
   daTagLimit,
   setDaTagLimit,
+  selectedModel,
+  setSelectedModel,
+  taggerModels,
 }) => {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
@@ -62,7 +74,54 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+          {/* Model Selection */}
+          <div>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="bg-violet-500/10 p-2 rounded-lg">
+                <Cpu className="w-4 h-4 text-violet-500" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">Tagger Model</p>
+                <p className="text-[10px] text-zinc-400 dark:text-zinc-500">Select the model used for tag extraction.</p>
+              </div>
+            </div>
+            <div className="ml-11 space-y-2">
+              {taggerModels.map((model) => (
+                <label
+                  key={model.id}
+                  className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                    selectedModel === model.id
+                      ? 'border-violet-500 bg-violet-500/5'
+                      : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="taggerModel"
+                    value={model.id}
+                    checked={selectedModel === model.id}
+                    onChange={(e) => setSelectedModel(e.target.value)}
+                    className="sr-only"
+                  />
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                    selectedModel === model.id
+                      ? 'border-violet-500'
+                      : 'border-zinc-300 dark:border-zinc-600'
+                  }`}>
+                    {selectedModel === model.id && (
+                      <div className="w-2 h-2 rounded-full bg-violet-500" />
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">{model.name}</p>
+                    <p className="text-[10px] text-zinc-400 dark:text-zinc-500">{model.description}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
           {/* Masterpiece Toggle */}
           <div>
             <div className="flex items-center justify-between">
