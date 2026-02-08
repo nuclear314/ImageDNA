@@ -9,7 +9,7 @@ import {
   Tag as TagIcon,
   Sliders
 } from 'lucide-react';
-import { AppState, Tag } from './types';
+import { AppState, AppView, Tag } from './types';
 
 // UI Components
 import Header from './components/Header';
@@ -18,6 +18,7 @@ import TagGrid from './components/TagGrid';
 import SettingsPanel from './components/SettingsPanel';
 import ProcessingState from './components/ProcessingState';
 import SettingsModal from './components/SettingsModal';
+import PromptGenerator from './components/PromptGenerator';
 
 function useLocalStorage<T>(key: string, defaultValue: T): [T, (val: T) => void] {
   const [value, setValue] = useState<T>(() => {
@@ -68,6 +69,7 @@ const App: React.FC = () => {
   const [copied, setCopied] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [currentView, setCurrentView] = useState<AppView>('tagger');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -235,7 +237,7 @@ const App: React.FC = () => {
         className="hidden"
         accept="image/*"
       />
-      <Header isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} onSettingsClick={() => setIsSettingsOpen(true)} />
+      <Header isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} onSettingsClick={() => setIsSettingsOpen(true)} currentView={currentView} onViewChange={setCurrentView} />
 
       <SettingsModal
         isOpen={isSettingsOpen}
@@ -258,7 +260,11 @@ const App: React.FC = () => {
         taggerModels={TAGGER_MODELS}
       />
       
-      <main className="max-w-6xl mx-auto px-4 py-8 pb-24">
+      {currentView === 'promptGenerator' && (
+        <PromptGenerator selectedModel={selectedModel} />
+      )}
+
+      {currentView === 'tagger' && <main className="max-w-6xl mx-auto px-4 py-8 pb-24">
         {/* Step Indicator */}
         <div className="flex items-center gap-4 mb-8 text-sm font-medium">
           <div className={`flex items-center gap-2 ${state === AppState.IDLE ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-400 dark:text-zinc-500'}`}>
@@ -417,7 +423,7 @@ const App: React.FC = () => {
             )}
           </div>
         </div>
-      </main>
+      </main>}
 
       <footer className="fixed bottom-0 left-0 right-0 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border-t border-zinc-200 dark:border-zinc-800 p-4 z-50">
         <div className="max-w-6xl mx-auto flex items-center justify-between text-xs text-zinc-500">
