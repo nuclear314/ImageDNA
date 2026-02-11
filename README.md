@@ -13,6 +13,19 @@ ImageDNA uses the [WD14 tagger model](https://huggingface.co/SmilingWolf/wd-eva0
 
 The frontend is built with React and the backend uses Flask with ONNX Runtime for model inference. The WD14 model is automatically downloaded from Hugging Face on first run.
 
+## Random Prompt Generator
+
+Click the **dice icon** in the top-left header to switch to the Random Prompt Generator. This tool builds structured prompts from the selected model's tag vocabulary.
+
+- **General Tags** - Toggle on/off and set how many random general tags to include (1-50). The generator ensures representation from key tag groups (subject count, hair, clothing, background, etc.) before filling the rest randomly.
+- **Character Tags** - Toggle to include a random character tag. When enabled, a **Subject Type** selector appears to pick the correct subject tag (`1girl`, `1boy`, `1other`, or `None`) to avoid mismatches.
+- **Consolidate Breasts** - Lock a specific breast size instead of letting the generator pick randomly. Choose from flat chest through gigantic breasts.
+- **Exclude Tags** - Comma-separated list of terms to filter out. Exclusions apply live to the current prompt after each term is committed with a comma.
+- **Structured Ordering** - Generated prompts follow conventional AI art prompt order: subject count, solo, nudity, character name, breast size, hair, clothing, background, then everything else.
+- **Live Controls** - Changing the subject type, breast size, or exclude tags instantly updates the current prompt without needing to re-roll.
+
+Click the **Generate Prompt** button to create a prompt, then use **Copy Tags** to copy it to clipboard. Click **Re-roll** to generate a new random prompt.
+
 ## Settings
 
 Click the **gear icon** in the top-right corner of the application to open the Settings menu. The following options are available:
