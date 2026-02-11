@@ -44,6 +44,21 @@ def tag_image():
         os.unlink(tmp_path)
 
 
+@app.route('/api/tags', methods=['GET'])
+def get_tags():
+    model_name = request.args.get('model', DEFAULT_MODEL)
+    tagger = get_tagger(model_name)
+    result = {'general': [], 'character': []}
+    for tag in tagger.tags:
+        cat = int(tag['category'])
+        name = tag['name']
+        if cat == 4:
+            result['character'].append(name)
+        elif cat != 9:
+            result['general'].append(name)
+    return jsonify(result)
+
+
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve_frontend(path):

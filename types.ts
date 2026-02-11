@@ -11,6 +11,13 @@ export interface InterrogationResult {
   rating: string;
 }
 
+export type AppView = 'tagger' | 'promptGenerator';
+
+export interface ModelTags {
+  general: string[];
+  character: string[];
+}
+
 export enum AppState {
   IDLE = 'IDLE',
   UPLOADING = 'UPLOADING',

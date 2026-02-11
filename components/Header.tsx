@@ -1,14 +1,17 @@
 
 import React from 'react';
-import { Fingerprint, Github, Sun, Moon, Settings } from 'lucide-react';
+import { Fingerprint, Github, Sun, Moon, Settings, Dices } from 'lucide-react';
+import { AppView } from '../types';
 
 interface HeaderProps {
   isDarkMode: boolean;
   setIsDarkMode: (val: boolean) => void;
   onSettingsClick: () => void;
+  currentView: AppView;
+  onViewChange: (view: AppView) => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ isDarkMode, setIsDarkMode, onSettingsClick }) => {
+const Header: React.FC<HeaderProps> = ({ isDarkMode, setIsDarkMode, onSettingsClick, currentView, onViewChange }) => {
   return (
     <header className="border-b border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-[#09090b]/50 backdrop-blur-md sticky top-0 z-50 transition-colors">
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -21,9 +24,23 @@ const Header: React.FC<HeaderProps> = ({ isDarkMode, setIsDarkMode, onSettingsCl
               ImageDNA
             </h1>
             <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-indigo-600 dark:text-indigo-500 leading-none">
-              WD14 Interrogator
+              {currentView === 'tagger' ? 'WD14 Interrogator' : 'Prompt Generator'}
             </p>
           </div>
+          <button
+            onClick={() => onViewChange(currentView === 'tagger' ? 'promptGenerator' : 'tagger')}
+            className={`ml-4 flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-medium transition-all border shadow-sm ${
+              currentView === 'promptGenerator'
+                ? 'bg-indigo-600 text-white border-indigo-500 shadow-indigo-500/20'
+                : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:text-indigo-600 dark:hover:text-white'
+            }`}
+            title={currentView === 'promptGenerator' ? 'Back to Tagger' : 'Random Prompt Generator'}
+          >
+            <Dices className="w-4 h-4" />
+            <span className="hidden sm:inline">
+              {currentView === 'promptGenerator' ? 'Tagger' : 'Prompt Gen'}
+            </span>
+          </button>
         </div>
         
         <div className="flex items-center gap-4 md:gap-6">
