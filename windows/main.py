@@ -36,8 +36,9 @@ for _ in range(60):
         time.sleep(0.5)
 
 # Open the app window
+storage = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'ImageDNA')
 webview.create_window('ImageDNA', 'http://127.0.0.1:5000', width=1280, height=900)
-webview.start()
+webview.start(storage_path=storage, private_mode=False)
 
 # Window closed — shut down the server
 proc.terminate()
