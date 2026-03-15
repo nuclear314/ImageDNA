@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { Settings2, Info, Ban } from 'lucide-react';
+import InfoBauble from './InfoBauble';
 
 interface SettingsPanelProps {
   threshold: number;
@@ -75,6 +76,11 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
             <label className="text-sm font-medium text-zinc-500 dark:text-zinc-400 flex items-center gap-2">
               <Ban className="w-4 h-4 text-rose-500" />
               Exclude Tags
+              <InfoBauble
+                text="Tags listed here are removed from all results. Useful for filtering out unwanted tags like 'text' or 'watermark'. Comma-separated. If a tag contains a space replace them with _ to exclude, for example 'this text' would be excluded by typing 'this_text'."
+                placement="top-left"
+                width="w-72"
+              />
             </label>
             <span className="text-[10px] font-bold text-zinc-300 dark:text-zinc-600 uppercase tracking-widest">Global Filter</span>
           </div>

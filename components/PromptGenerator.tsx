@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Dices, Copy, Check, Loader2, Tag as TagIcon, SlidersHorizontal, Users, Layers, Ban, Sliders } from 'lucide-react';
+import InfoBauble from './InfoBauble';
 import { ModelTags } from '../types';
 
 interface PromptGeneratorProps {
@@ -278,9 +279,16 @@ const PromptGenerator: React.FC<PromptGeneratorProps> = ({ selectedModel }) => {
               <div className="bg-indigo-500/10 p-2 rounded-lg">
                 <SlidersHorizontal className="w-4 h-4 text-indigo-500" />
               </div>
-              <div>
-                <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">Generation Controls</p>
-                <p className="text-[10px] text-zinc-400 dark:text-zinc-500">Configure which tag categories and how many to include.</p>
+              <div className="flex items-start gap-2">
+                <div>
+                  <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">Generation Controls</p>
+                  <p className="text-[10px] text-zinc-400 dark:text-zinc-500">Configure which tag categories and how many to include.</p>
+                </div>
+                <InfoBauble
+                  text="The generator picks tags from structured groups (subject, body, hair, clothing, background) to create coherent prompts from the model's vocabulary."
+                  placement="bottom-left"
+                  width="w-72"
+                />
               </div>
             </div>
 
@@ -292,9 +300,16 @@ const PromptGenerator: React.FC<PromptGeneratorProps> = ({ selectedModel }) => {
                     <div className="bg-indigo-500/10 p-1.5 rounded-md">
                       <Layers className="w-3.5 h-3.5 text-indigo-500" />
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">General Tags</p>
-                      <p className="text-[10px] text-zinc-400 dark:text-zinc-500">{modelTags.general.length.toLocaleString()} tags available</p>
+                    <div className="flex items-start gap-2">
+                      <div>
+                        <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">General Tags</p>
+                        <p className="text-[10px] text-zinc-400 dark:text-zinc-500">{modelTags.general.length.toLocaleString()} tags available</p>
+                      </div>
+                      <InfoBauble
+                        text="Describes appearance, clothing, poses, and scenery. Increase count for more detailed prompts. Tags are drawn from structured categories for variety."
+                        placement="top-left"
+                        width="w-72"
+                      />
                     </div>
                   </div>
                   <button
@@ -336,9 +351,16 @@ const PromptGenerator: React.FC<PromptGeneratorProps> = ({ selectedModel }) => {
                     <div className="bg-purple-500/10 p-1.5 rounded-md">
                       <Users className="w-3.5 h-3.5 text-purple-500" />
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">Character Tags</p>
-                      <p className="text-[10px] text-zinc-400 dark:text-zinc-500">{modelTags.character.length.toLocaleString()} tags available</p>
+                    <div className="flex items-start gap-2">
+                      <div>
+                        <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">Character Tags</p>
+                        <p className="text-[10px] text-zinc-400 dark:text-zinc-500">{modelTags.character.length.toLocaleString()} tags available</p>
+                      </div>
+                      <InfoBauble
+                        text="Named characters from the model's training data. One character randomly selected per generation. Subject type (1girl, 1boy) prepended automatically."
+                        placement="top-left"
+                        width="w-72"
+                      />
                     </div>
                   </div>
                   <button
@@ -376,9 +398,16 @@ const PromptGenerator: React.FC<PromptGeneratorProps> = ({ selectedModel }) => {
                     <div className="bg-rose-500/10 p-1.5 rounded-md">
                       <Sliders className="w-3.5 h-3.5 text-rose-500" />
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">Consolidate Breasts</p>
-                      <p className="text-[10px] text-zinc-400 dark:text-zinc-500">Lock breast size instead of random.</p>
+                    <div className="flex items-start gap-2">
+                      <div>
+                        <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">Consolidate Breasts</p>
+                        <p className="text-[10px] text-zinc-400 dark:text-zinc-500">Lock breast size instead of random.</p>
+                      </div>
+                      <InfoBauble
+                        text="Locks breast size to your chosen value instead of random selection. Updates live in the current prompt without re-rolling."
+                        placement="top-left"
+                        width="w-72"
+                      />
                     </div>
                   </div>
                   <button
@@ -418,9 +447,16 @@ const PromptGenerator: React.FC<PromptGeneratorProps> = ({ selectedModel }) => {
                   <div className="bg-rose-500/10 p-1.5 rounded-md">
                     <Ban className="w-3.5 h-3.5 text-rose-500" />
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">Exclude Tags</p>
-                    <p className="text-[10px] text-zinc-400 dark:text-zinc-500">Tags matching these terms will never appear.</p>
+                  <div className="flex items-start gap-2">
+                    <div>
+                      <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">Exclude Tags</p>
+                      <p className="text-[10px] text-zinc-400 dark:text-zinc-500">Tags matching these terms will never appear.</p>
+                    </div>
+                    <InfoBauble
+                      text="Tags matching these terms won't appear in generated prompts. Matches are partial (e.g. 'water' excludes 'watermark' and 'underwater'). Applied after typing a comma."
+                      placement="top-left"
+                      width="w-72"
+                    />
                   </div>
                 </div>
               </div>
