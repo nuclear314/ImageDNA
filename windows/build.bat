@@ -40,8 +40,9 @@ if errorlevel 1 (echo ERROR: PyInstaller failed. & pause & exit /b 1)
 echo.
 echo [3/4] Setting up embedded Python server runtime...
 
-:: Determine Python version from the current environment
-for /f "tokens=2" %%v in ('python --version 2^>^&1') do set PYVER=%%v
+:: Pinned Python version for the embedded server runtime.
+:: Change only when you want to upgrade the bundled Python.
+set PYVER=3.12.9
 echo     Using Python !PYVER!
 
 set CACHE_DIR=%~dp0cache
@@ -80,9 +81,11 @@ powershell -Command "Invoke-WebRequest -Uri 'https://bootstrap.pypa.io/get-pip.p
 if errorlevel 1 (echo ERROR: pip bootstrap failed. & pause & exit /b 1)
 del "!SERVER_DIR!\get-pip.py"
 
-:: Install app requirements
+:: Install app requirements directly into the server's site-packages.
+:: --target prevents pip from skipping packages that are already installed
+:: in the developer's own Python environment ("Requirement already satisfied").
 echo     Installing packages (this may take a few minutes)...
-"!SERVER_DIR!\python.exe" -m pip install -r ..\requirements.txt --no-warn-script-location --quiet
+"!SERVER_DIR!\python.exe" -m pip install -r ..\requirements.txt --target="!SERVER_DIR!\Lib\site-packages" --no-warn-script-location --quiet
 if errorlevel 1 (echo ERROR: Package installation failed. & pause & exit /b 1)
 
 :: Copy app files into the server directory

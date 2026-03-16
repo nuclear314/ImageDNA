@@ -1,13 +1,12 @@
 # PyInstaller spec for the ImageDNA launcher.
-# The launcher only needs webview + stdlib — onnxruntime runs in a separate
-# embedded Python process (release/ImageDNA/server/) and is never imported here.
+# The launcher is stdlib-only: it starts the embedded Python server and
+# opens Edge/Chrome in app mode. No webview or onnxruntime bundled here.
 
 import os
 import glob
 import sys
-from PyInstaller.utils.hooks import collect_all
 
-root           = os.path.abspath('..')
+root            = os.path.abspath('..')
 base_python_dir = sys.base_prefix
 
 # Python runtime DLLs from the base install (not the venv Scripts/ dir)
@@ -20,23 +19,12 @@ for pattern in [f'python{ver}.dll', f'python{sys.version_info.major}.dll', 'vcru
 print(f'[spec] base_python_dir : {base_python_dir}')
 print(f'[spec] runtime DLLs    : {[os.path.basename(d[0]) for d in _runtime_dlls]}')
 
-# Only collect webview — no onnxruntime, flask, or tagger here
-_datas, _binaries, _hiddenimports = [], [], []
-for pkg in ('webview',):
-    d, b, h = collect_all(pkg)
-    _datas    += d
-    _binaries += b
-    _hiddenimports += h
-
 a = Analysis(
     [os.path.join(root, 'windows', 'main.py')],
     pathex=[root],
-    binaries=_runtime_dlls + _binaries,
-    datas=_datas,
-    hiddenimports=_hiddenimports + [
-        'webview.platforms.winforms',
-        'webview.platforms.edgechromium',
-    ],
+    binaries=_runtime_dlls,
+    datas=[],
+    hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
