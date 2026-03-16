@@ -7,7 +7,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tagger import WD14Tagger
 
 app = Flask(__name__)
-STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dist')
+# When bundled with PyInstaller, data files live under sys._MEIPASS
+_BASE = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+STATIC_DIR = os.path.join(_BASE, 'dist')
 DEFAULT_MODEL = 'SmilingWolf/wd-eva02-large-tagger-v3'
 _taggers = {}  # Cache taggers by model name
 
