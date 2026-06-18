@@ -12,14 +12,16 @@ ImageDNA is a full-stack web application for extracting semantic tags from image
 
 ## Architecture
 
-The app has two main views toggled from the header:
+The app has three main views toggled from the header:
 
 1. **Tagger** — Upload an image → run ONNX inference → display tags with confidence scores
 2. **Prompt Generator** — Fetch model vocabulary → generate structured prompts from tag groups
+3. **EXIF Extractor** — Upload an image → extract EXIF metadata and AI generation parameters (positive/negative prompt, settings)
 
 **API Endpoints (Flask):**
 - `POST /api/tag` — accepts image file, returns `general_tags` and `character_tags` with scores
 - `GET /api/tags` — returns full tag vocabulary for the active model
+- `POST /api/exif` — accepts image file, returns structured EXIF metadata and PNG text chunks (including Stable Diffusion `parameters`)
 
 **State persistence:** React `useState` + `localStorage`, all keys prefixed `imagedna:`
 
@@ -31,6 +33,7 @@ The app has two main views toggled from the header:
 | `server.py` | Flask server and API endpoint handlers |
 | `tagger.py` | `WD14Tagger` class — HF model download, image preprocessing, ONNX inference |
 | `components/PromptGenerator.tsx` | Tag vocabulary loading, priority-group prompt generation |
+| `components/ExifExtractor.tsx` | EXIF/PNG metadata extraction view — parses and splits SD generation parameters |
 | `components/SettingsModal.tsx` | Model selection, feature toggles (masterpiece, underscores, breast consolidation, DA mode) |
 | `components/SettingsPanel.tsx` | Confidence threshold slider and exclude tags textarea |
 | `components/InfoBauble.tsx` | Reusable hoverable tooltip `(i)` component |
@@ -43,6 +46,10 @@ The app has two main views toggled from the header:
 **Tagging:**
 Image upload → `POST /api/tag` → ONNX inference (448×448 BGR) → confidence scores
 → frontend filters: threshold slider, exclude list, breast consolidation → `TagGrid`
+
+**EXIF extraction:**
+Image upload → `POST /api/exif` → Pillow reads `img.getexif()` (JPEG EXIF) + `img.info` (PNG text chunks)
+→ frontend parses `parameters` string into positive prompt / negative prompt / settings → `ExifExtractor`
 
 **Prompt generation:**
 `GET /api/tags` vocabulary → priority grouping (subject → body → hair → clothing → background → misc)

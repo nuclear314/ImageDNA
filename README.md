@@ -10,6 +10,7 @@ ImageDNA uses the [WD14 tagger model](https://huggingface.co/SmilingWolf/wd-eva0
 - **Generates copy-ready prompts** - Outputs tags as a comma-separated prompt string ready for use with image generation
 - **Provides filtering controls** - Adjust confidence threshold, exclude specific tags, and customize output formatting
 - **Offers convenience options** - Toggle masterpiece quality tags, switch between underscores and spaces, and consolidate similar tags
+- **Reads image metadata** - Extracts EXIF data and AI generation parameters (positive prompt, negative prompt, sampler settings) from any image
 
 The frontend is built with React and the backend uses Flask with ONNX Runtime for model inference. The WD14 model is automatically downloaded from Hugging Face on first run.
 
@@ -25,6 +26,19 @@ Click the **dice icon** in the top-left header to switch to the Random Prompt Ge
 - **Live Controls** - Changing the subject type, breast size, or exclude tags instantly updates the current prompt without needing to re-roll.
 
 Click the **Generate Prompt** button to create a prompt, then use **Copy Tags** to copy it to clipboard. Click **Re-roll** to generate a new random prompt.
+
+## EXIF Extractor
+
+Click the **EXIF** tab in the header to switch to the EXIF Extractor. Drop or click to upload any image and the tool will read its embedded metadata.
+
+- **Generation Parameters** - For AI-generated images (Stable Diffusion, ComfyUI, etc.), the embedded parameters string is split into three sections:
+  - *Positive* - The positive prompt, highlighted in green with its own copy button
+  - *Negative* - The negative prompt, highlighted in red with its own copy button
+  - *Settings* - Sampler, steps, CFG scale, seed, and other generation settings
+  - *Full Parameters* - The raw unmodified string with a "Copy All" button
+- **Image Text Data** - Other PNG text chunks are shown in a collapsible section
+- **EXIF Metadata** - Camera make/model, lens, exposure settings, ISO, date/time, and GPS for photos taken on real cameras
+- **Drag to replace** - With an image already loaded, drag a new image directly onto the preview to replace it instantly
 
 ## Settings
 
