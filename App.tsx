@@ -19,6 +19,7 @@ import SettingsPanel from './components/SettingsPanel';
 import ProcessingState from './components/ProcessingState';
 import SettingsModal from './components/SettingsModal';
 import PromptGenerator from './components/PromptGenerator';
+import ExifExtractor from './components/ExifExtractor';
 
 function useLocalStorage<T>(key: string, defaultValue: T): [T, (val: T) => void] {
   const [value, setValue] = useState<T>(() => {
@@ -262,6 +263,10 @@ const App: React.FC = () => {
       
       {currentView === 'promptGenerator' && (
         <PromptGenerator selectedModel={selectedModel} />
+      )}
+
+      {currentView === 'exifExtractor' && (
+        <ExifExtractor />
       )}
 
       {currentView === 'tagger' && <main className="max-w-6xl mx-auto px-4 py-8 pb-24">

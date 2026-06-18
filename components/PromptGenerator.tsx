@@ -68,7 +68,8 @@ const PromptGenerator: React.FC<PromptGeneratorProps> = ({ selectedModel }) => {
   const [generalEnabled, setGeneralEnabled] = useState(true);
   const [characterEnabled, setCharacterEnabled] = useState(true);
   const [generalCount, setGeneralCount] = useState(15);
-  const characterCount = 1;
+  const [characterCount, setCharacterCount] = useState(1);
+  const [characterOnlyMode, setCharacterOnlyMode] = useState(false);
 
   const [subjectType, setSubjectType] = useState<string>('1girl');
   const [breastConsolidate, setBreastConsolidate] = useState(false);
@@ -151,7 +152,7 @@ const PromptGenerator: React.FC<PromptGeneratorProps> = ({ selectedModel }) => {
     const result: { label: string; category: 'general' | 'character' }[] = [];
 
     // When character is enabled, inject the user-chosen subject type instead of random
-    if (characterEnabled && subjectType !== 'none') {
+    if (characterEnabled && !characterOnlyMode && subjectType !== 'none') {
       result.push({ label: subjectType, category: 'general' as const });
     }
 
@@ -174,6 +175,7 @@ const PromptGenerator: React.FC<PromptGeneratorProps> = ({ selectedModel }) => {
         !isExcluded(t)
         && !(characterEnabled && classifyTag(t) === 0)
         && !(breastConsolidate && classifyTag(t) === 3)
+        && !(characterOnlyMode && classifyTag(t) === 6)
       );
       const count = Math.min(generalCount, pool.length);
 
@@ -371,23 +373,70 @@ const PromptGenerator: React.FC<PromptGeneratorProps> = ({ selectedModel }) => {
                   </button>
                 </div>
                 {characterEnabled && (
-                  <div className="ml-9 mt-2">
-                    <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mb-2">Subject type</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {['1girl', '1boy', '1other', 'none'].map(opt => (
-                        <button
-                          key={opt}
-                          onClick={() => setSubjectType(opt)}
-                          className={`px-3 py-1 rounded-lg text-xs font-medium border transition-all ${
-                            subjectType === opt
-                              ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/50'
-                              : 'bg-zinc-50 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'
-                          }`}
-                        >
-                          {opt === 'none' ? 'None' : opt}
-                        </button>
-                      ))}
+                  <div className="ml-9 mt-2 space-y-3">
+                    <div>
+                      <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mb-2">Subject type</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {['1girl', '1boy', '1other', 'none'].map(opt => (
+                          <button
+                            key={opt}
+                            onClick={() => !characterOnlyMode && setSubjectType(opt)}
+                            disabled={characterOnlyMode}
+                            className={`px-3 py-1 rounded-lg text-xs font-medium border transition-all ${
+                              characterOnlyMode
+                                ? 'opacity-40 cursor-not-allowed bg-zinc-50 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 border-zinc-200 dark:border-zinc-700'
+                                : subjectType === opt
+                                  ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/50'
+                                  : 'bg-zinc-50 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'
+                            }`}
+                          >
+                            {opt === 'none' ? 'None' : opt}
+                          </button>
+                        ))}
+                      </div>
                     </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-start gap-2">
+                        <p className="text-xs font-medium text-zinc-600 dark:text-zinc-300">Character Only</p>
+                        <InfoBauble
+                          text="Picks multiple characters and restricts general tags to character-defining traits (hair, clothing, body). Background and environment tags are excluded."
+                          placement="top-left"
+                          width="w-72"
+                        />
+                      </div>
+                      <button
+                        onClick={() => setCharacterOnlyMode(!characterOnlyMode)}
+                        className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${characterOnlyMode ? 'bg-purple-500' : 'bg-zinc-200 dark:bg-zinc-700'}`}
+                      >
+                        <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${characterOnlyMode ? 'translate-x-4' : 'translate-x-0'}`} />
+                      </button>
+                    </div>
+                    {characterOnlyMode && (
+                      <div>
+                        <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mb-2">Characters to pick</p>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="range"
+                            min={1}
+                            max={Math.min(5, modelTags.character.length)}
+                            value={characterCount}
+                            onChange={(e) => setCharacterCount(Number(e.target.value))}
+                            className="flex-1 h-2 bg-zinc-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                          />
+                          <input
+                            type="number"
+                            min={1}
+                            max={Math.min(5, modelTags.character.length)}
+                            value={characterCount}
+                            onChange={(e) => {
+                              const val = Math.max(1, Math.min(Math.min(5, modelTags.character.length), Number(e.target.value) || 1));
+                              setCharacterCount(val);
+                            }}
+                            className="w-14 text-sm font-medium text-zinc-700 dark:text-zinc-200 text-center bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

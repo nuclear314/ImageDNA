@@ -11,7 +11,7 @@ export interface InterrogationResult {
   rating: string;
 }
 
-export type AppView = 'tagger' | 'promptGenerator';
+export type AppView = 'tagger' | 'promptGenerator' | 'exifExtractor';
 
 export interface ModelTags {
   general: string[];
