@@ -3,8 +3,24 @@ import sys
 import subprocess
 import time
 import json
+import logging
 import urllib.request
 import ctypes
+
+# Persistent profile for localStorage / settings
+user_data = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'ImageDNA')
+os.makedirs(user_data, exist_ok=True)
+log_path = os.path.join(user_data, 'server.log')
+launcher_log_path = os.path.join(user_data, 'launcher.log')
+
+# Captures pywebview's own internal logger (it logs, but doesn't re-raise,
+# the real exception behind each backend it tries) so failures are
+# diagnosable from launcher.log instead of a generic error dialog. pywebview's
+# Windows backend (winforms.py) needs the classic .NET Framework specifically
+# — it references assemblies (e.g. Microsoft.Win32.SystemEvents, bundled into
+# System.Windows.Forms.dll under netfx) that don't resolve the same way under
+# CoreCLR/.NET Desktop Runtime, so don't try to force pythonnet onto coreclr.
+logging.basicConfig(filename=launcher_log_path, filemode='w', level=logging.DEBUG)
 
 import webview
 
@@ -21,11 +37,6 @@ if not os.path.exists(python_exe):
         f'Make sure the full release\\ImageDNA\\ folder is present, not just the .exe.',
         'ImageDNA — startup error', 0x10)
     sys.exit(1)
-
-# Persistent profile for localStorage / settings
-user_data = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'ImageDNA')
-os.makedirs(user_data, exist_ok=True)
-log_path = os.path.join(user_data, 'server.log')
 
 # Keep downloaded models under the same app-data folder, so uninstalling/
 # cleaning the app is a single folder delete.
@@ -75,11 +86,18 @@ if not server_ready:
     proc.terminate()
     sys.exit(1)
 
-window = webview.create_window(
-    'ImageDNA', 'http://127.0.0.1:5000',
-    width=1280, height=900, min_size=(900, 650))
-webview.start()
-# webview.start() blocks until the window is closed
+try:
+    window = webview.create_window(
+        'ImageDNA', 'http://127.0.0.1:5000',
+        width=1280, height=900, min_size=(900, 650))
+    webview.start()
+    # webview.start() blocks until the window is closed
+except Exception as exc:
+    logging.exception('Failed to open the app window')
+    ctypes.windll.user32.MessageBoxW(
+        0,
+        f'Failed to open the app window:\n{exc}\n\nCheck the log for details:\n{launcher_log_path}',
+        'ImageDNA — startup error', 0x10)
 
 proc.terminate()
 proc.wait()
