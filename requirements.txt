@@ -1,5 +1,5 @@
-flask
-huggingface_hub
-numpy
-onnxruntime
-Pillow
+flask==3.1.3
+huggingface_hub==1.23.0
+numpy==2.5.1
+onnxruntime==1.27.0
+Pillow==12.3.0
