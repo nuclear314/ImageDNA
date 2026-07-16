@@ -30,4 +30,5 @@ __pycache__/*
 release/
 windows/build/
 windows/cache/
+windows/_server_backup/
 imagedna-improvement-plan.md
