@@ -13,7 +13,7 @@ call npm run build
 if errorlevel 1 (echo ERROR: npm build failed. & pause & exit /b 1)
 
 :: -----------------------------------------------------------------------
-:: Step 2 - Build the PyInstaller launcher (webview only, no onnxruntime)
+:: Step 2 - Build the PyInstaller launcher (pywebview window, no onnxruntime bundled)
 :: -----------------------------------------------------------------------
 cd /d "%~dp0"
 echo.
