@@ -24,11 +24,17 @@ user_data = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'Im
 os.makedirs(user_data, exist_ok=True)
 log_path = os.path.join(user_data, 'server.log')
 
+# Keep downloaded models under the same app-data folder, so uninstalling/
+# cleaning the app is a single folder delete.
+env = os.environ.copy()
+env['HF_HOME'] = os.path.join(user_data, 'models')
+
 # Start Flask in the embedded Python; capture output to log file
 log_file = open(log_path, 'w')
 proc = subprocess.Popen(
     [python_exe, server_py],
     cwd=server_dir,
+    env=env,
     creationflags=subprocess.CREATE_NO_WINDOW,
     stdout=log_file,
     stderr=log_file,
