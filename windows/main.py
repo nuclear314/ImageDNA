@@ -2,8 +2,11 @@ import os
 import sys
 import subprocess
 import time
+import json
 import urllib.request
 import ctypes
+
+import webview
 
 # Locate the embedded server directory alongside this executable
 base = os.path.dirname(sys.executable) if hasattr(sys, '_MEIPASS') else os.path.join(os.path.dirname(__file__), '..')
@@ -40,58 +43,43 @@ proc = subprocess.Popen(
     stderr=log_file,
 )
 
-# Poll until the server responds (up to 30 s)
+# Poll /api/status until the tagger model is actually loaded, not just until
+# the Flask process is up. /api/status triggers and blocks on model load,
+# which on first run also covers downloading the model from Hugging Face —
+# so this budget is minutes, not seconds.
 server_ready = False
-for _ in range(60):
+server_error = False
+for _ in range(600):
     if proc.poll() is not None:
         break  # server crashed
     try:
-        urllib.request.urlopen('http://127.0.0.1:5000', timeout=1)
-        server_ready = True
-        break
+        with urllib.request.urlopen('http://127.0.0.1:5000/api/status', timeout=2) as resp:
+            state = json.loads(resp.read())
+        if state.get('status') == 'ready':
+            server_ready = True
+            break
+        if state.get('status') == 'error':
+            server_error = True
+            break
     except Exception:
-        time.sleep(0.5)
+        pass
+    time.sleep(1)
 
 if not server_ready:
     log_file.flush()
+    detail = 'The tagger model failed to load.' if server_error else 'The ImageDNA server failed to start.'
     ctypes.windll.user32.MessageBoxW(
         0,
-        f'The ImageDNA server failed to start.\n\nCheck the log for details:\n{log_path}',
+        f'{detail}\n\nCheck the log for details:\n{log_path}',
         'ImageDNA — startup error', 0x10)
     proc.terminate()
     sys.exit(1)
 
-# Find Edge or Chrome (app mode — no address bar, looks like a native window)
-browser_exe = None
-for path in [
-    r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe',
-    r'C:\Program Files\Microsoft\Edge\Application\msedge.exe',
-    r'C:\Program Files\Google\Chrome\Application\chrome.exe',
-    r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe',
-]:
-    if os.path.exists(path):
-        browser_exe = path
-        break
+window = webview.create_window(
+    'ImageDNA', 'http://127.0.0.1:5000',
+    width=1280, height=900, min_size=(900, 650))
+webview.start()
+# webview.start() blocks until the window is closed
 
-if browser_exe:
-    subprocess.Popen([
-        browser_exe,
-        '--app=http://127.0.0.1:5000',
-        '--window-size=1280,900',
-        f'--user-data-dir={user_data}',
-        '--no-first-run',
-        '--no-default-browser-check',
-    ])
-else:
-    import webbrowser
-    webbrowser.open('http://127.0.0.1:5000')
-
-# Keep Flask alive until the user explicitly quits
-ctypes.windll.user32.MessageBoxW(
-    0,
-    'ImageDNA is running.\n\nClose this dialog to stop the server.',
-    'ImageDNA', 0x40)
-
-# Browser window closed — shut down the server
 proc.terminate()
 proc.wait()
