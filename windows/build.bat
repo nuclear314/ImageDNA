@@ -25,7 +25,7 @@ if exist "..\\.venv\\Scripts\\activate.bat" (
     call "..\\.venv\\Scripts\\activate.bat"
 )
 
-pip install pyinstaller pywebview --quiet
+pip install -r requirements-windows.txt --quiet
 if errorlevel 1 (echo ERROR: pip install failed. & pause & exit /b 1)
 
 python -m PyInstaller imagedna.spec --distpath ..\release --workpath build --noconfirm
