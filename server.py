@@ -1,6 +1,7 @@
 import os
 import sys
 import tempfile
+import threading
 from flask import Flask, request, jsonify, send_from_directory
 from PIL import Image, ExifTags
 
@@ -13,16 +14,26 @@ _BASE = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(_BASE, 'dist')
 DEFAULT_MODEL = 'SmilingWolf/wd-eva02-large-tagger-v3'
 _taggers = {}  # Cache taggers by model name
+_tagger_lock = threading.Lock()
+_model_state = {"status": "idle", "model": None}  # idle | downloading | ready | error
 
 
 def get_tagger(model_name=None):
     global _taggers
     if model_name is None:
         model_name = DEFAULT_MODEL
-    if model_name not in _taggers:
-        print(f"Loading model: {model_name}")
-        _taggers[model_name] = WD14Tagger(model_name)
-    return _taggers[model_name]
+    with _tagger_lock:
+        if model_name not in _taggers:
+            _model_state["status"] = "downloading"
+            _model_state["model"] = model_name
+            print(f"Loading model: {model_name}")
+            try:
+                _taggers[model_name] = WD14Tagger(model_name)
+            except Exception:
+                _model_state["status"] = "error"
+                raise
+            _model_state["status"] = "ready"
+        return _taggers[model_name]
 
 
 @app.route('/api/tag', methods=['POST'])
@@ -151,6 +162,15 @@ def get_tags():
     return jsonify(result)
 
 
+@app.route('/api/status', methods=['GET'])
+def status():
+    try:
+        get_tagger()
+    except Exception:
+        pass  # _model_state already reflects "error"; report it rather than 500
+    return jsonify(_model_state)
+
+
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve_frontend(path):
@@ -160,4 +180,5 @@ def serve_frontend(path):
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    from waitress import serve
+    serve(app, host='0.0.0.0', port=5000)

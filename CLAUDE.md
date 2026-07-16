@@ -6,9 +6,11 @@ ImageDNA is a full-stack web application for extracting semantic tags from image
 
 ## Tech Stack
 
-**Frontend:** React 19 + TypeScript, Vite 6, Tailwind CSS (CDN), Lucide-react icons
-**Backend:** Python 3.12+, Flask, ONNX Runtime, Hugging Face Hub, Pillow, NumPy
-**Dev/Prod:** Docker (multi-stage), Vite dev proxy routes `/api` → Flask on port 5000
+**Frontend:** React 19 + TypeScript, Vite 6, Tailwind CSS (`@tailwindcss/vite`, built not CDN), Lucide-react icons
+**Backend:** Python 3.12+, Flask + waitress, ONNX Runtime, Hugging Face Hub, Pillow, NumPy
+**Dev/Prod:** Docker (multi-stage), Vite dev proxy routes `/api` → Flask on port 5000. A separate `windows/`
+standalone build (PyInstaller + embedded Python + pywebview) also exists — see README's "How to build the
+Windows standalone app" section.
 
 ## Architecture
 
@@ -72,7 +74,7 @@ Models are downloaded from Hugging Face Hub on first use and cached server-side 
 - All React components live in `components/`
 - Use the `InfoBauble` component for any contextual help tooltip
 - Tag category accent colors: general=indigo, character=purple, rating=amber, meta=emerald
-- Tailwind utility classes only — no custom CSS files
+- Tailwind utility classes only — `index.css` is just the Tailwind build entry point (`@import`/`@custom-variant`), not a place for ad-hoc component CSS
 - Dark mode uses the `dark:` variant with a class toggle on `<html>`
 - LocalStorage keys must use the `imagedna:` prefix
 

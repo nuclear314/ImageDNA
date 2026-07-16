@@ -1,6 +1,9 @@
 # PyInstaller spec for the ImageDNA launcher.
-# The launcher is stdlib-only: it starts the embedded Python server and
-# opens Edge/Chrome in app mode. No webview or onnxruntime bundled here.
+# The launcher starts the embedded Python server and opens it in a native
+# pywebview window (WebView2 backend). pyinstaller-hooks-contrib already
+# ships hooks for webview/clr/clr_loader, so no explicit hiddenimports are
+# needed here. No onnxruntime bundled in the launcher itself — that lives
+# in the embedded Python server runtime (see windows/build.bat step 3).
 
 import os
 import glob

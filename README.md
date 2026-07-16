@@ -112,3 +112,49 @@ The Dockerfile uses a multi-stage build to create a production-ready image:
 3. Open http://localhost:5000 in your browser
 
 The container exposes port 5000 and will download the WD14 model from Hugging Face on first startup.
+
+### Persisting the model cache
+
+By default the container re-downloads the tagger model every time it's recreated. Point `HF_HOME` at a
+named volume so the model survives across `docker run` recreations:
+
+```bash
+docker run -p 5000:5000 -e HF_HOME=/cache -v imagedna-cache:/cache imagedna
+```
+
+## How to build the Windows standalone app
+
+`windows/` contains a PyInstaller-based launcher that bundles an embedded Python server and opens the
+app in a native window (via `pywebview`), so end users don't need Python, Node, or Docker installed.
+
+**Prerequisites:**
+- Windows
+- Python 3.12+
+- Node.js 24+
+- A virtual environment at the repo root (`.venv`) with `windows/requirements-windows.txt` installed —
+  `build.bat` activates it automatically if present
+
+```bat
+cd windows
+build.bat
+```
+
+This runs a full build: compiles the frontend, builds the PyInstaller launcher, and sets up the embedded
+Python server runtime (downloading the Python embeddable package once, cached under `windows\cache\`).
+
+For fast iteration on just the launcher (`windows/main.py` or `imagedna.spec`), skip re-provisioning the
+embedded server runtime:
+
+```bat
+build.bat --skip-server
+```
+
+This only works if a full build has already populated `release\ImageDNA\server\` — it reuses that
+directory instead of rebuilding it. Note that `--skip-server` will **not** pick up changes to
+`requirements.txt` (or other server-side changes), since it skips the step that reinstalls those
+packages into the embedded runtime — run a full `build.bat` after touching `requirements.txt`.
+
+The output lands in `release\ImageDNA\`. Launch the app with `release\ImageDNA\ImageDNA.exe`.
+
+First run requires internet access to download the tagger model from Hugging Face into
+`%APPDATA%\ImageDNA\models`; it's cached there afterward, so subsequent launches work offline.

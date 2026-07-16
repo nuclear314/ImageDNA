@@ -66,7 +66,7 @@ const App: React.FC = () => {
   const [consolidateBreasts, setConsolidateBreasts] = useLocalStorage('imagedna:consolidateBreasts', false);
   const [useDAMode, setUseDAMode] = useLocalStorage('imagedna:useDAMode', false);
   const [daTagLimit, setDaTagLimit] = useLocalStorage('imagedna:daTagLimit', 30);
-  const [selectedModel, setSelectedModel] = useLocalStorage('imagedna:selectedModel', TAGGER_MODELS[0].id);
+  const [selectedModel, setSelectedModel] = useLocalStorage<string>('imagedna:selectedModel', TAGGER_MODELS[0].id);
   const [copied, setCopied] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);

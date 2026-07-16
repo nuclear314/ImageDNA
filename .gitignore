@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 *.local
+.venv/
 
 # Editor directories and files
 .vscode/*
@@ -29,3 +30,5 @@ __pycache__/*
 release/
 windows/build/
 windows/cache/
+windows/_server_backup/
+imagedna-improvement-plan.md
