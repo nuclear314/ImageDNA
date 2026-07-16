@@ -72,7 +72,7 @@ Models are downloaded from Hugging Face Hub on first use and cached server-side 
 - All React components live in `components/`
 - Use the `InfoBauble` component for any contextual help tooltip
 - Tag category accent colors: general=indigo, character=purple, rating=amber, meta=emerald
-- Tailwind utility classes only — no custom CSS files
+- Tailwind utility classes only — `index.css` is just the Tailwind build entry point (`@import`/`@custom-variant`), not a place for ad-hoc component CSS
 - Dark mode uses the `dark:` variant with a class toggle on `<html>`
 - LocalStorage keys must use the `imagedna:` prefix
 
