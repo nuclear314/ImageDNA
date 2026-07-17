@@ -2,7 +2,13 @@
 import React from 'react';
 import { Loader2, Fingerprint } from 'lucide-react';
 
-const ProcessingState: React.FC = () => {
+interface ProcessingStateProps {
+  status?: string;
+}
+
+const ProcessingState: React.FC<ProcessingStateProps> = ({ status }) => {
+  const isDownloading = status === 'downloading';
+
   return (
     <div className="h-full min-h-[400px] flex flex-col items-center justify-center border border-zinc-200 dark:border-zinc-800 rounded-3xl bg-white dark:bg-zinc-900/30 overflow-hidden relative shadow-sm dark:shadow-none">
       <div className="absolute inset-0 bg-gradient-to-b from-indigo-500/5 to-transparent"></div>
@@ -16,16 +22,20 @@ const ProcessingState: React.FC = () => {
           <div className="absolute top-0 left-[-20px] right-[-20px] h-[2px] bg-indigo-500 shadow-[0_0_20px_#6366f1] animate-[scan_2s_ease-in-out_infinite] z-20"></div>
         </div>
 
-        <h3 className="text-2xl font-bold text-zinc-800 dark:text-white mb-2">Analyzing Prompt DNA</h3>
+        <h3 className="text-2xl font-bold text-zinc-800 dark:text-white mb-2">
+          {isDownloading ? 'Downloading Tagger Model' : 'Analyzing Prompt DNA'}
+        </h3>
         <p className="text-zinc-400 dark:text-zinc-500 mb-8 max-w-xs leading-relaxed">
-          The WD14 model is interrogating every pixel to identify labels, characters, and styles.
+          {isDownloading
+            ? 'Downloading the tagger model from Hugging Face (first run only) — this can take a few minutes depending on your connection.'
+            : 'The WD14 model is interrogating every pixel to identify labels, characters, and styles.'}
         </p>
 
         <div className="flex items-center gap-4">
           <div className="w-32 h-1 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden shadow-inner">
             <div className="h-full bg-indigo-500 animate-[progress_2.5s_ease-in-out_infinite]"></div>
           </div>
-          <span className="text-[10px] font-bold text-zinc-300 dark:text-zinc-600 uppercase tracking-widest">Inference...</span>
+          <span className="text-[10px] font-bold text-zinc-300 dark:text-zinc-600 uppercase tracking-widest">{isDownloading ? 'Downloading...' : 'Inference...'}</span>
         </div>
       </div>
 

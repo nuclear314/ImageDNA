@@ -71,6 +71,7 @@ const App: React.FC = () => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [currentView, setCurrentView] = useState<AppView>('tagger');
+  const [modelStatus, setModelStatus] = useState<{ status: string; model: string | null } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -80,6 +81,31 @@ const App: React.FC = () => {
       document.documentElement.classList.remove('dark');
     }
   }, [isDarkMode]);
+
+  // Poll model load status while interrogating, so the processing screen can show a
+  // real "downloading the model" message on a first-run cold start instead of a fake
+  // fixed-duration animation. Stops automatically once state leaves INTERROGATING.
+  useEffect(() => {
+    if (state !== AppState.INTERROGATING) return;
+    let cancelled = false;
+
+    const poll = async () => {
+      try {
+        const res = await fetch('/api/status');
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (cancelled) return;
+        setModelStatus(data);
+        if (data.status === 'error') setState(AppState.ERROR);
+      } catch {
+        // Transient poll failure — ignore and try again on the next tick.
+      }
+    };
+
+    poll();
+    const id = setInterval(poll, 1000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [state]);
 
   // Re-run tagging when model changes and we have an image loaded
   const previousModelRef = useRef(selectedModel);
@@ -359,7 +385,7 @@ const App: React.FC = () => {
             )}
 
             {state === AppState.INTERROGATING && (
-              <ProcessingState />
+              <ProcessingState status={modelStatus?.status} />
             )}
 
             {state === AppState.RESULT && result && (
