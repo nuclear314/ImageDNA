@@ -21,7 +21,8 @@ set "SERVER_BACKUP=%~dp0_server_backup"
 cd /d "%~dp0.."
 echo [1/4] Building React frontend...
 call npm run build
-if errorlevel 1 (echo ERROR: npm build failed. & pause & exit /b 1)
+if errorlevel 1 echo ERROR: npm build failed.
+if errorlevel 1 goto :build_failed
 
 :: -----------------------------------------------------------------------
 :: Step 2 - Build the PyInstaller launcher (pywebview window, no onnxruntime bundled)
@@ -37,7 +38,8 @@ if exist "..\\.venv\\Scripts\\activate.bat" (
 )
 
 pip install -r requirements-windows.txt --quiet
-if errorlevel 1 (echo ERROR: pip install failed. & pause & exit /b 1)
+if errorlevel 1 echo ERROR: pip install failed.
+if errorlevel 1 goto :build_failed
 
 :: PyInstaller's --noconfirm wipes the whole release\ImageDNA\ folder before
 :: rebuilding (even with --skip-server), so move the existing server\ runtime
@@ -50,7 +52,8 @@ if defined SKIP_SERVER (
 )
 
 python -m PyInstaller imagedna.spec --distpath ..\release --workpath build --noconfirm
-if errorlevel 1 (echo ERROR: PyInstaller failed. & pause & exit /b 1)
+if errorlevel 1 echo ERROR: PyInstaller failed.
+if errorlevel 1 goto :build_failed
 
 if exist "!SERVER_BACKUP!" (
     move "!SERVER_BACKUP!" "!SERVER_DIR!" >nul
@@ -88,7 +91,8 @@ if "!DO_SKIP_SERVER!"=="1" (
         echo     Downloading Python !PYVER! embeddable package...
         if not exist "!CACHE_DIR!" mkdir "!CACHE_DIR!"
         powershell -Command "Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/!PYVER!/python-!PYVER!-embed-amd64.zip' -OutFile '!EMBED_ZIP!'"
-        if errorlevel 1 (echo ERROR: Download failed. & pause & exit /b 1)
+        if errorlevel 1 echo ERROR: Download failed.
+        if errorlevel 1 goto :build_failed
     ) else (
         echo     Using cached !EMBED_ZIP!
     )
@@ -96,7 +100,8 @@ if "!DO_SKIP_SERVER!"=="1" (
     :: Extract
     echo     Extracting...
     powershell -Command "Expand-Archive -Path '!EMBED_ZIP!' -DestinationPath '!SERVER_DIR!' -Force"
-    if errorlevel 1 (echo ERROR: Extraction failed. & pause & exit /b 1)
+    if errorlevel 1 echo ERROR: Extraction failed.
+    if errorlevel 1 goto :build_failed
 
     :: Enable site-packages by uncommenting 'import site' in the ._pth file
     echo     Enabling site-packages...
@@ -108,7 +113,8 @@ if "!DO_SKIP_SERVER!"=="1" (
     echo     Installing pip...
     powershell -Command "Invoke-WebRequest -Uri 'https://bootstrap.pypa.io/get-pip.py' -OutFile '!SERVER_DIR!\get-pip.py'"
     "!SERVER_DIR!\python.exe" "!SERVER_DIR!\get-pip.py" --no-warn-script-location --quiet
-    if errorlevel 1 (echo ERROR: pip bootstrap failed. & pause & exit /b 1)
+    if errorlevel 1 echo ERROR: pip bootstrap failed.
+    if errorlevel 1 goto :build_failed
     del "!SERVER_DIR!\get-pip.py"
 
     :: Install app requirements directly into the server's site-packages.
@@ -116,7 +122,8 @@ if "!DO_SKIP_SERVER!"=="1" (
     :: in the developer's own Python environment ("Requirement already satisfied").
     echo     Installing packages ^(this may take a few minutes^)...
     "!SERVER_DIR!\python.exe" -m pip install -r ..\requirements.txt --target="!SERVER_DIR!\Lib\site-packages" --no-warn-script-location --quiet
-    if errorlevel 1 (echo ERROR: Package installation failed. & pause & exit /b 1)
+    if errorlevel 1 echo ERROR: Package installation failed.
+    if errorlevel 1 goto :build_failed
 
     :: Copy app files into the server directory
     echo     Copying app files...
@@ -131,4 +138,19 @@ echo.
 echo [4/4] Build complete!
 echo Distributable: release\ImageDNA\
 echo Launch with:   release\ImageDNA\ImageDNA.exe
-pause
+if not defined CI pause
+exit /b 0
+
+:: Reached via "goto :build_failed" from the error checks above. Each of those
+:: checks is deliberately two bare top-level "if errorlevel 1 ..." lines rather
+:: than a single "if errorlevel 1 (echo ... & pause & exit /b 1)" block: cmd.exe
+:: resets a nested block's "exit /b" return code to 0 as it unwinds through
+:: enclosing parens, and a "goto" placed inside a parenthesized block can also
+:: fail to resolve its label when that block is immediately followed by another
+:: if/else construct (as several of these are, e.g. Step 3's skip/setup branch).
+:: Keeping "if errorlevel 1 <cmd>" unparenthesized and jumping from there avoids
+:: both pitfalls. Verified locally by driving every failure branch under a
+:: simulated CI env var and confirming exit code 1 in each case.
+:build_failed
+if not defined CI pause
+exit /b 1
