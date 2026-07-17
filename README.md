@@ -58,7 +58,7 @@ Click the **gear icon** in the top-right corner of the application to open the S
 
 - **DA Tag Limit** (visible when DeviantArt Mode is enabled) - A slider to set the maximum number of tags to copy (5-30). DeviantArt has a limit of 30 tags per submission.
 
-## How to run locally (Standalone)
+## How to run locally (Docker)
 You can use the pre-build docker image hosted on [Docker Hub](https://hub.docker.com/r/nuclear314/image-dna) if you want to just run the application and don't require the development files
 
 **Prerequisites:** Docker
@@ -66,6 +66,26 @@ You can use the pre-build docker image hosted on [Docker Hub](https://hub.docker
 ```bash
 docker run -d -p 5000:5000 nuclear314/image-dna:latest
 ```
+
+## How to run locally (Windows)
+
+A packaged Windows build (`ImageDNA.exe`) runs standalone — no Python, Node, or Docker needed. Grab a
+build from CI (see [How to build the Windows standalone app](#how-to-build-the-windows-standalone-app))
+or a release if one's been published, then just run the exe.
+
+**Prerequisites:**
+- [Visual C++ Redistributable 2015–2022 (x64), v14.29+](https://aka.ms/vs/17/release/vc_redist.x64.exe) —
+  `onnxruntime` requires the VC++ 2019 runtime or later; the linked installer always ships the latest
+  compatible version. Missing it surfaces as `ImportError: DLL load failed while importing
+  onnxruntime_pybind11_state` when the app starts.
+- [.NET Desktop Runtime](https://dotnet.microsoft.com/download/dotnet) — required by `pywebview`'s `pythonnet` bridge on Windows. Already preinstalled
+  on Windows 10/11; only relevant on older or minimal Windows installs.
+- **WebView2 Runtime** — renders the app window; preinstalled on Windows 11 and auto-delivered via Windows
+  Update on Windows 10. If missing, install the
+  [Evergreen Bootstrapper](https://developer.microsoft.com/en-us/microsoft-edge/webview2/).
+
+First run requires internet access to download the tagger model from Hugging Face into
+`%APPDATA%\ImageDNA\models`; it's cached there afterward, so subsequent launches work offline.
 
 ## How to run locally (Development)
 
@@ -157,4 +177,5 @@ packages into the embedded runtime — run a full `build.bat` after touching `re
 The output lands in `release\ImageDNA\`. Launch the app with `release\ImageDNA\ImageDNA.exe`.
 
 First run requires internet access to download the tagger model from Hugging Face into
-`%APPDATA%\ImageDNA\models`; it's cached there afterward, so subsequent launches work offline.
+`%APPDATA%\ImageDNA\models`; it's cached there afterward, so subsequent launches work offline. See
+[How to run locally (Windows)](#how-to-run-locally-windows) for the runtime prerequisites end users need.
