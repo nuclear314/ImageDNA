@@ -55,9 +55,10 @@ proc = subprocess.Popen(
 )
 
 # Poll /api/status until the tagger model is actually loaded, not just until
-# the Flask process is up. /api/status triggers and blocks on model load,
-# which on first run also covers downloading the model from Hugging Face —
-# so this budget is minutes, not seconds.
+# the Flask process is up. server.py starts loading the default model in a
+# background thread as soon as it boots; /api/status is a pure, non-blocking
+# read of that progress, and on first run the load also covers downloading the
+# model from Hugging Face — so this budget is minutes, not seconds.
 server_ready = False
 server_error = False
 for _ in range(600):

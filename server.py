@@ -164,10 +164,6 @@ def get_tags():
 
 @app.route('/api/status', methods=['GET'])
 def status():
-    try:
-        get_tagger()
-    except Exception:
-        pass  # _model_state already reflects "error"; report it rather than 500
     return jsonify(_model_state)
 
 
@@ -181,4 +177,10 @@ def serve_frontend(path):
 
 if __name__ == '__main__':
     from waitress import serve
-    serve(app, host='0.0.0.0', port=5000)
+    # Start loading the default model in the background immediately, rather than
+    # waiting for the first /api/tag or /api/tags request to trigger it. This lets
+    # /api/status (a pure read, never itself a trigger) reflect real load progress
+    # from the moment the process starts, which the Windows launcher polls before
+    # opening its window, and it means Docker readiness reflects real usability sooner.
+    threading.Thread(target=get_tagger, daemon=True).start()
+    serve(app, host='0.0.0.0', port=5000, threads=8)
