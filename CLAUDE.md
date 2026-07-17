@@ -24,6 +24,11 @@ The app has three main views toggled from the header:
 - `POST /api/tag` — accepts image file, returns `general_tags` and `character_tags` with scores
 - `GET /api/tags` — returns full tag vocabulary for the active model
 - `POST /api/exif` — accepts image file, returns structured EXIF metadata and PNG text chunks (including Stable Diffusion `parameters`)
+- `GET /api/status` — returns `{status, model}` reflecting tagger load state (`idle`/`downloading`/`ready`/`error`); polled by the Windows launcher and the frontend's processing view, never triggers loading itself
+
+**Model loading:** the default tagger model starts loading in a background thread as soon as `server.py`
+boots, rather than lazily on first `/api/tag`/`/api/tags` request — this pre-warms the Windows launcher's
+startup wait and makes Docker readiness reflect real usability sooner.
 
 **State persistence:** React `useState` + `localStorage`, all keys prefixed `imagedna:`
 
