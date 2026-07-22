@@ -14,11 +14,14 @@ Windows standalone app" section.
 
 ## Architecture
 
-The app has three main views toggled from the header:
+The app has four main views toggled from the header:
 
 1. **Tagger** — Upload an image → run ONNX inference → display tags with confidence scores
-2. **Prompt Generator** — Fetch model vocabulary → generate structured prompts from tag groups
-3. **EXIF Extractor** — Upload an image → extract EXIF metadata and AI generation parameters (positive/negative prompt, settings)
+2. **Bulk Tagger** — Drop many images → tag them sequentially against `/api/tag`, reusing the same
+   settings (threshold, exclude list, model, masterpiece/underscore/breast/DA toggles) as the single
+   Tagger → per-image results in-page, with an optional zip export (image + matching `.txt` caption)
+3. **Prompt Generator** — Fetch model vocabulary → generate structured prompts from tag groups
+4. **EXIF Extractor** — Upload an image → extract EXIF metadata and AI generation parameters (positive/negative prompt, settings)
 
 **API Endpoints (Flask):**
 - `POST /api/tag` — accepts image file, returns `general_tags` and `character_tags` with scores
@@ -39,8 +42,11 @@ startup wait and makes Docker readiness reflect real usability sooner.
 | `App.tsx` | Root component — global state, image upload, tag filtering logic |
 | `server.py` | Flask server and API endpoint handlers |
 | `tagger.py` | `WD14Tagger` class — HF model download, image preprocessing, ONNX inference |
+| `components/BulkTagger.tsx` | Bulk view — multi-file queue, sequential `/api/tag` processing, zip export |
 | `components/PromptGenerator.tsx` | Tag vocabulary loading, priority-group prompt generation |
 | `components/ExifExtractor.tsx` | EXIF/PNG metadata extraction view — parses and splits SD generation parameters |
+| `lib/tagFiltering.ts` | Pure tag filter/format pipeline (threshold, exclude, masterpiece, breast consolidation), shared by the single-image and bulk flows |
+| `lib/exportZip.ts` | Builds a downloadable zip of image + matching `.txt` caption pairs (JSZip) |
 | `components/SettingsModal.tsx` | Model selection, feature toggles (masterpiece, underscores, breast consolidation, DA mode) |
 | `components/SettingsPanel.tsx` | Confidence threshold slider and exclude tags textarea |
 | `components/InfoBauble.tsx` | Reusable hoverable tooltip `(i)` component |
@@ -53,6 +59,12 @@ startup wait and makes Docker readiness reflect real usability sooner.
 **Tagging:**
 Image upload → `POST /api/tag` → ONNX inference (448×448 BGR) → confidence scores
 → frontend filters: threshold slider, exclude list, breast consolidation → `TagGrid`
+
+**Bulk tagging:**
+Multiple images dropped at once → queued client-side → one `POST /api/tag` in flight at a time
+(sequential, not parallel — no batched backend endpoint) → each result run through the same
+`lib/tagFiltering.ts` pipeline as the single-image flow → per-image `TagGrid` + optional
+`lib/exportZip.ts` zip download (image + matching `.txt` caption per file)
 
 **EXIF extraction:**
 Image upload → `POST /api/exif` → Pillow reads `img.getexif()` (JPEG EXIF) + `img.info` (PNG text chunks)

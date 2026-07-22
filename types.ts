@@ -11,11 +11,22 @@ export interface InterrogationResult {
   rating: string;
 }
 
-export type AppView = 'tagger' | 'promptGenerator' | 'exifExtractor';
+export type AppView = 'tagger' | 'promptGenerator' | 'exifExtractor' | 'bulk';
 
 export interface ModelTags {
   general: string[];
   character: string[];
+}
+
+export type BulkItemStatus = 'queued' | 'processing' | 'done' | 'error';
+
+export interface BulkItem {
+  id: string;
+  file: File;
+  previewUrl: string;
+  status: BulkItemStatus;
+  rawTags?: Tag[];
+  error?: string;
 }
 
 export enum AppState {

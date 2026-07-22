@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Fingerprint, Github, Sun, Moon, Settings, Dices, ScanLine } from 'lucide-react';
+import { Fingerprint, Github, Sun, Moon, Settings, Dices, ScanLine, Layers } from 'lucide-react';
 import { AppView } from '../types';
 
 interface HeaderProps {
@@ -24,12 +24,13 @@ const Header: React.FC<HeaderProps> = ({ isDarkMode, setIsDarkMode, onSettingsCl
               ImageDNA
             </h1>
             <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-indigo-600 dark:text-indigo-500 leading-none">
-              {currentView === 'tagger' ? 'WD14 Interrogator' : currentView === 'promptGenerator' ? 'Prompt Generator' : 'EXIF Extractor'}
+              {currentView === 'tagger' ? 'WD14 Interrogator' : currentView === 'promptGenerator' ? 'Prompt Generator' : currentView === 'exifExtractor' ? 'EXIF Extractor' : 'Bulk Tagger'}
             </p>
           </div>
           <div className="ml-4 flex items-center gap-0.5 bg-zinc-100 dark:bg-zinc-800 rounded-xl p-1 border border-zinc-200 dark:border-zinc-700">
             {([
               { view: 'tagger', icon: Fingerprint, label: 'Tagger' },
+              { view: 'bulk', icon: Layers, label: 'Bulk' },
               { view: 'promptGenerator', icon: Dices, label: 'Prompt' },
               { view: 'exifExtractor', icon: ScanLine, label: 'EXIF' },
             ] as const).map(({ view, icon: Icon, label }) => (

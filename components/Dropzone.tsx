@@ -4,9 +4,11 @@ import { Upload, ImagePlus } from 'lucide-react';
 
 interface DropzoneProps {
   onUpload: (file: File) => void;
+  /** Accept and report multiple files instead of just the first one. Defaults to false. */
+  multiple?: boolean;
 }
 
-const Dropzone: React.FC<DropzoneProps> = ({ onUpload }) => {
+const Dropzone: React.FC<DropzoneProps> = ({ onUpload, multiple = false }) => {
   const [isDragActive, setIsDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -24,13 +26,19 @@ const Dropzone: React.FC<DropzoneProps> = ({ onUpload }) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragActive(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+    if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
+    if (multiple) {
+      Array.from(e.dataTransfer.files).forEach(onUpload);
+    } else {
       onUpload(e.dataTransfer.files[0]);
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
+    if (!e.target.files || e.target.files.length === 0) return;
+    if (multiple) {
+      Array.from(e.target.files).forEach(onUpload);
+    } else {
       onUpload(e.target.files[0]);
     }
   };
@@ -48,12 +56,13 @@ const Dropzone: React.FC<DropzoneProps> = ({ onUpload }) => {
       }`}
       onClick={() => fileInputRef.current?.click()}
     >
-      <input 
-        type="file" 
-        ref={fileInputRef} 
-        onChange={handleFileChange} 
-        className="hidden" 
-        accept="image/*" 
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        className="hidden"
+        accept="image/*"
+        multiple={multiple}
       />
       
       <div className={`p-5 rounded-2xl transition-all duration-500 ${
@@ -68,10 +77,10 @@ const Dropzone: React.FC<DropzoneProps> = ({ onUpload }) => {
 
       <div className="text-center px-6">
         <p className="font-semibold text-zinc-700 dark:text-zinc-300 mb-1 group-hover:text-indigo-600 dark:group-hover:text-white transition-colors">
-          Click or drop image here
+          {multiple ? 'Click or drop images here' : 'Click or drop image here'}
         </p>
         <p className="text-sm text-zinc-500 max-w-[200px] leading-relaxed">
-          Supports PNG, JPG, WEBP. Extract prompt from your favorite art.
+          {multiple ? 'Supports PNG, JPG, WEBP. Select or drop as many as you like.' : 'Supports PNG, JPG, WEBP. Extract prompt from your favorite art.'}
         </p>
       </div>
 

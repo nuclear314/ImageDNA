@@ -10,6 +10,7 @@ import {
   Sliders
 } from 'lucide-react';
 import { AppState, AppView, Tag } from './types';
+import { filterAndFormatTags } from './lib/tagFiltering';
 
 // UI Components
 import Header from './components/Header';
@@ -20,6 +21,7 @@ import ProcessingState from './components/ProcessingState';
 import SettingsModal from './components/SettingsModal';
 import PromptGenerator from './components/PromptGenerator';
 import ExifExtractor from './components/ExifExtractor';
+import BulkTagger from './components/BulkTagger';
 
 function useLocalStorage<T>(key: string, defaultValue: T): [T, (val: T) => void] {
   const [value, setValue] = useState<T>(() => {
@@ -39,11 +41,8 @@ function useLocalStorage<T>(key: string, defaultValue: T): [T, (val: T) => void]
   return [value, setStoredValue];
 }
 
-const MASTERPIECE_LABELS = ['masterpiece', 'best_quality', 'highres', 'ultra-detailed', 'ultra_detailed', 'amazing_quality'];
 const DEFAULT_MASTERPIECE_TAGS = 'masterpiece, best quality, highres, ultra-detailed';
-const BREAST_TAGS = ['breasts', 'flat_chest', 'small_breasts', 'medium_breasts', 'large_breasts', 'huge_breasts', 'gigantic_breasts'];
 const BREAST_SIZES = ['flat', 'small', 'medium', 'large', 'huge', 'gigantic'];
-const DA_EXCLUDED_TAGS = ['1girl', '1boy', 'solo', 'looking_at_viewer'];
 
 const TAGGER_MODELS = [
   { id: 'SmilingWolf/wd-eva02-large-tagger-v3', name: 'EVA02 Large v3', description: 'Best accuracy (default)' },
@@ -120,69 +119,12 @@ const App: React.FC = () => {
   const result = useMemo(() => {
     if (state !== AppState.RESULT) return null;
 
-    const negativeList = negativeTags
-      .split(',')
-      .map(t => t.trim().toLowerCase())
-      .filter(t => t.length > 0);
-
-    // Initial filter: Threshold + User Negatives
-    let filtered = rawResultTags.filter(tag => {
-      const isAboveThreshold = tag.confidence >= threshold;
-      const isNotExcluded = !negativeList.includes(tag.label.toLowerCase());
-      return isAboveThreshold && isNotExcluded;
+    const formatted = filterAndFormatTags(rawResultTags, {
+      threshold, negativeTags, includeMasterpiece, masterpieceTags,
+      useUnderscores, consolidateBreasts, breastSize, daTagLimit,
     });
 
-    // Strip any tagger-generated masterpiece tags (added synthetically if toggle is on)
-    filtered = filtered.filter(tag => !MASTERPIECE_LABELS.includes(tag.label.toLowerCase()));
-
-    // Sort by confidence descending
-    filtered.sort((a, b) => b.confidence - a.confidence);
-
-    // Consolidate breast tags into user-selected size (if enabled)
-    const hasBreastTag = filtered.some(tag => BREAST_TAGS.includes(tag.label.toLowerCase()));
-    if (consolidateBreasts && hasBreastTag) {
-      const firstIdx = filtered.findIndex(tag => BREAST_TAGS.includes(tag.label.toLowerCase()));
-      const maxConfidence = filtered[firstIdx].confidence;
-      filtered = filtered.filter(tag => !BREAST_TAGS.includes(tag.label.toLowerCase()));
-      filtered.splice(firstIdx, 0, {
-        label: breastSize === 'flat' ? 'flat_chest' : `${breastSize}_breasts`,
-        confidence: maxConfidence,
-        category: 'general' as const
-      });
-    }
-
-    // Prepend masterpiece tags if toggle is on
-    if (includeMasterpiece) {
-      const customTags = masterpieceTags
-        .split(',')
-        .map(t => t.trim())
-        .filter(t => t.length > 0)
-        .map(label => ({ label, confidence: 1, category: 'general' as const }));
-      filtered = [...customTags, ...filtered];
-    }
-
-    // Generate the raw prompt string, normalizing word separators
-    const rawPrompt = filtered.map(t =>
-      useUnderscores ? t.label.replace(/ /g, '_') : t.label.replace(/_/g, ' ')
-    ).join(', ');
-
-    // Generate DeviantArt-compatible tags: lowercase, no spaces, no underscores, hyphens become underscores
-    const deviantArtPrompt = filtered
-      .filter(tag => {
-        const normalized = tag.label.toLowerCase().replace(/ /g, '_');
-        return !DA_EXCLUDED_TAGS.includes(normalized) && !normalized.endsWith('_background');
-      })
-      .slice(0, daTagLimit)
-      .map(tag => tag.label.replace(/_/g, '').replace(/-/g, '_').replace(/\s/g, '').toLowerCase())
-      .join(' ');
-
-    return {
-      tags: filtered,
-      rawPrompt: rawPrompt,
-      deviantArtPrompt: deviantArtPrompt,
-      rating: 'General',
-      hasBreastTag
-    };
+    return { ...formatted, rating: 'General' };
   }, [rawResultTags, threshold, negativeTags, state, includeMasterpiece, masterpieceTags, useUnderscores, breastSize, consolidateBreasts, daTagLimit]);
 
   const handleInterrogate = async (file: File) => {
@@ -293,6 +235,23 @@ const App: React.FC = () => {
 
       {currentView === 'exifExtractor' && (
         <ExifExtractor />
+      )}
+
+      {currentView === 'bulk' && (
+        <BulkTagger
+          selectedModel={selectedModel}
+          threshold={threshold}
+          onThresholdChange={setThreshold}
+          negativeTags={negativeTags}
+          onNegativeTagsChange={setNegativeTags}
+          includeMasterpiece={includeMasterpiece}
+          masterpieceTags={masterpieceTags}
+          useUnderscores={useUnderscores}
+          consolidateBreasts={consolidateBreasts}
+          breastSize={breastSize}
+          useDAMode={useDAMode}
+          daTagLimit={daTagLimit}
+        />
       )}
 
       {currentView === 'tagger' && <main className="max-w-6xl mx-auto px-4 py-8 pb-24">
