@@ -27,6 +27,7 @@ import CaptionPanel from './components/CaptionPanel';
 
 const DEFAULT_MASTERPIECE_TAGS = 'masterpiece, best quality, highres, ultra-detailed';
 const BREAST_SIZES = ['flat', 'small', 'medium', 'large', 'huge', 'gigantic'];
+const APP_VERSION = 'v2.1';
 
 const TAGGER_MODELS = [
   { id: 'SmilingWolf/wd-eva02-large-tagger-v3', name: 'EVA02 Large v3', description: 'Best accuracy (default)' },
@@ -415,6 +416,8 @@ const App: React.FC = () => {
           </div>
           <div className="flex items-center gap-4">
             <span>ImageDNA © 2026</span>
+            <span className="text-zinc-300 dark:text-zinc-700">•</span>
+            <span>{APP_VERSION}</span>
           </div>
         </div>
       </footer>
