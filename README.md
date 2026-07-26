@@ -14,6 +14,33 @@ ImageDNA uses the [WD14 tagger model](https://huggingface.co/SmilingWolf/wd-eva0
 
 The frontend is built with React and the backend uses Flask with ONNX Runtime for model inference. The WD14 model is automatically downloaded from Hugging Face on first run.
 
+## Step 2: Natural Language Captioning
+
+After tagging an image, an optional **Step 2** card lets you compose a natural-language caption with
+[JoyCaption Beta One](https://github.com/fpgaminer/joycaption), grounded in the WD14 tags extracted in
+Step 1 rather than having it guess from pixels alone — the same WD14 + JoyCaption workflow commonly used
+for anime LoRA/dataset captioning. Choose a mode (Descriptive, Straightforward, SD-style Prompt,
+MidJourney, Social Media), optionally toggle extra details (lighting, camera angle, rating, etc.), and
+click **Compose Natural Language Prompt**.
+
+This feature is additive and optional:
+
+- **Install:** `pip install -r requirements-joycaption.txt` (in addition to `requirements.txt`). Requires
+  an NVIDIA GPU; first use downloads the JoyCaption model (~6–17GB depending on quantization) from
+  Hugging Face.
+- **GPU build of torch:** `requirements-joycaption.txt` pins a bare `torch>=2.3.0` so it installs on any
+  machine, but plain `pip install torch` from PyPI resolves to a **CPU-only** wheel — PyTorch's CUDA
+  builds are too large for PyPI and only live on their own index. If the header's caption-speed badge
+  shows "Slow Caption" despite having an NVIDIA GPU, reinstall torch from that index, e.g.:
+  `pip install --index-url https://download.pytorch.org/whl/cu126 torch==<installed-version> --force-reinstall`
+  (check available CUDA tags/versions with `pip index versions torch --index-url https://download.pytorch.org/whl/cu126`).
+- **Quantization:** Settings → Natural Language Captioning lets you pick 4-bit (fastest, ~6GB VRAM),
+  8-bit (~10GB VRAM), or full bf16 precision (~17GB VRAM, best quality).
+- Without `requirements-joycaption.txt` installed, the Step 2 card shows a clear "missing dependencies"
+  message and the rest of the app (WD14 tagging, EXIF extraction, prompt generation) is unaffected.
+- **Not currently supported in the Windows standalone build** — `torch`/`transformers`/`bitsandbytes` are
+  not bundled into the PyInstaller executable. Use the Docker or dev-server setup for Step 2.
+
 ## Random Prompt Generator
 
 Click the **dice icon** in the top-left header to switch to the Random Prompt Generator. This tool builds structured prompts from the selected model's tag vocabulary.
@@ -141,6 +168,26 @@ named volume so the model survives across `docker run` recreations:
 ```bash
 docker run -p 5000:5000 -e HF_HOME=/cache -v imagedna-cache:/cache imagedna
 ```
+
+### Enabling Step 2 (JoyCaption) in Docker
+
+Off by default — the image above is CPU-only and doesn't install `torch`/`transformers`/`bitsandbytes` at
+all, since most users don't need the multi-GB GPU-captioning stack. To opt in, build with
+`WITH_JOYCAPTION=true` and run with `--gpus all`:
+
+```bash
+docker build --build-arg WITH_JOYCAPTION=true -t imagedna-joycaption .
+docker run --gpus all -p 5000:5000 imagedna-joycaption
+```
+
+**Prerequisites for the GPU build:** an NVIDIA GPU and the
+[NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+installed on the Docker host (this is what makes `--gpus all` work). No CUDA base image is needed — the
+`torch` wheel installed from PyTorch's `cu126` index bundles its own CUDA runtime libraries; the container
+toolkit just needs to expose the host's NVIDIA driver into the container.
+
+Without `WITH_JOYCAPTION=true`, the Step 2 card in the running app shows its normal "missing dependencies"
+message and everything else (WD14 tagging, EXIF extraction, prompt generation) works as usual.
 
 ## How to build the Windows standalone app
 

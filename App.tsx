@@ -9,8 +9,9 @@ import {
   Tag as TagIcon,
   Sliders
 } from 'lucide-react';
-import { AppState, AppView, Tag } from './types';
+import { AppState, AppView, Tag, CaptionQuantization, CaptionCapability } from './types';
 import { filterAndFormatTags } from './lib/tagFiltering';
+import { useLocalStorage } from './lib/useLocalStorage';
 
 // UI Components
 import Header from './components/Header';
@@ -22,27 +23,11 @@ import SettingsModal from './components/SettingsModal';
 import PromptGenerator from './components/PromptGenerator';
 import ExifExtractor from './components/ExifExtractor';
 import BulkTagger from './components/BulkTagger';
-
-function useLocalStorage<T>(key: string, defaultValue: T): [T, (val: T) => void] {
-  const [value, setValue] = useState<T>(() => {
-    try {
-      const stored = localStorage.getItem(key);
-      return stored !== null ? JSON.parse(stored) : defaultValue;
-    } catch {
-      return defaultValue;
-    }
-  });
-
-  const setStoredValue = (newValue: T) => {
-    setValue(newValue);
-    localStorage.setItem(key, JSON.stringify(newValue));
-  };
-
-  return [value, setStoredValue];
-}
+import CaptionPanel from './components/CaptionPanel';
 
 const DEFAULT_MASTERPIECE_TAGS = 'masterpiece, best quality, highres, ultra-detailed';
 const BREAST_SIZES = ['flat', 'small', 'medium', 'large', 'huge', 'gigantic'];
+const APP_VERSION = 'v2.2';
 
 const TAGGER_MODELS = [
   { id: 'SmilingWolf/wd-eva02-large-tagger-v3', name: 'EVA02 Large v3', description: 'Best accuracy (default)' },
@@ -66,11 +51,14 @@ const App: React.FC = () => {
   const [useDAMode, setUseDAMode] = useLocalStorage('imagedna:useDAMode', false);
   const [daTagLimit, setDaTagLimit] = useLocalStorage('imagedna:daTagLimit', 30);
   const [selectedModel, setSelectedModel] = useLocalStorage<string>('imagedna:selectedModel', TAGGER_MODELS[0].id);
+  const [enableJoyCaption, setEnableJoyCaption] = useLocalStorage('imagedna:enableJoyCaption', false);
+  const [captionQuantization, setCaptionQuantization] = useLocalStorage<CaptionQuantization>('imagedna:captionQuantization', '4bit');
   const [copied, setCopied] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [currentView, setCurrentView] = useState<AppView>('tagger');
   const [modelStatus, setModelStatus] = useState<{ status: string; model: string | null } | null>(null);
+  const [captionCapability, setCaptionCapability] = useState<CaptionCapability | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -80,6 +68,17 @@ const App: React.FC = () => {
       document.documentElement.classList.remove('dark');
     }
   }, [isDarkMode]);
+
+  // One-time check (not polled — GPU presence can't change during a running session)
+  // backing the header's fast/slow caption speed indicator.
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/caption-capability')
+      .then((res) => res.json())
+      .then((data) => { if (!cancelled) setCaptionCapability(data); })
+      .catch(() => { /* leave as null — badge just stays hidden */ });
+    return () => { cancelled = true; };
+  }, []);
 
   // Poll model load status while interrogating, so the processing screen can show a
   // real "downloading the model" message on a first-run cold start instead of a fake
@@ -206,7 +205,7 @@ const App: React.FC = () => {
         className="hidden"
         accept="image/*"
       />
-      <Header isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} onSettingsClick={() => setIsSettingsOpen(true)} currentView={currentView} onViewChange={setCurrentView} />
+      <Header isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} onSettingsClick={() => setIsSettingsOpen(true)} currentView={currentView} onViewChange={setCurrentView} captionCapability={enableJoyCaption ? captionCapability : null} />
 
       <SettingsModal
         isOpen={isSettingsOpen}
@@ -227,6 +226,10 @@ const App: React.FC = () => {
         selectedModel={selectedModel}
         setSelectedModel={setSelectedModel}
         taggerModels={TAGGER_MODELS}
+        enableJoyCaption={enableJoyCaption}
+        setEnableJoyCaption={setEnableJoyCaption}
+        captionQuantization={captionQuantization}
+        setCaptionQuantization={setCaptionQuantization}
       />
       
       {currentView === 'promptGenerator' && (
@@ -401,6 +404,13 @@ const App: React.FC = () => {
                   )}
                 </div>
 
+                {enableJoyCaption && (
+                  <CaptionPanel
+                    imageFile={currentFile}
+                    knownTags={result.tags.map(t => t.label)}
+                    quantization={captionQuantization}
+                  />
+                )}
               </div>
             )}
 
@@ -423,6 +433,8 @@ const App: React.FC = () => {
           </div>
           <div className="flex items-center gap-4">
             <span>ImageDNA © 2026</span>
+            <span className="text-zinc-300 dark:text-zinc-700">•</span>
+            <span>{APP_VERSION}</span>
           </div>
         </div>
       </footer>

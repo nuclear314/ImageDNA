@@ -36,3 +36,28 @@ export enum AppState {
   RESULT = 'RESULT',
   ERROR = 'ERROR'
 }
+
+// Step 2: natural-language composition via JoyCaption, grounded in the WD14 tags from step 1.
+export type CaptionMode = 'descriptive' | 'straightforward' | 'sd_prompt' | 'midjourney' | 'social_media';
+export type CaptionTone = 'casual' | 'formal';
+export type CaptionQuantization = '4bit' | '8bit' | 'bf16';
+export type CaptionStatus = 'idle' | 'loading' | 'downloading' | 'error' | 'done';
+
+export interface CaptionExtraOption {
+  id: string;
+  label: string;
+  instruction: string;
+}
+
+export interface CaptionModeOption {
+  id: CaptionMode;
+  label: string;
+  description: string;
+}
+
+// Hardware/dependency check backing the header's caption-speed indicator —
+// distinct from CaptionStatus, which tracks an in-flight compose/load.
+export interface CaptionCapability {
+  available: boolean;
+  cuda: boolean;
+}
