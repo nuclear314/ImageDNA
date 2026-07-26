@@ -9,8 +9,9 @@ import {
   Tag as TagIcon,
   Sliders
 } from 'lucide-react';
-import { AppState, AppView, Tag } from './types';
+import { AppState, AppView, Tag, CaptionQuantization } from './types';
 import { filterAndFormatTags } from './lib/tagFiltering';
+import { useLocalStorage } from './lib/useLocalStorage';
 
 // UI Components
 import Header from './components/Header';
@@ -22,24 +23,7 @@ import SettingsModal from './components/SettingsModal';
 import PromptGenerator from './components/PromptGenerator';
 import ExifExtractor from './components/ExifExtractor';
 import BulkTagger from './components/BulkTagger';
-
-function useLocalStorage<T>(key: string, defaultValue: T): [T, (val: T) => void] {
-  const [value, setValue] = useState<T>(() => {
-    try {
-      const stored = localStorage.getItem(key);
-      return stored !== null ? JSON.parse(stored) : defaultValue;
-    } catch {
-      return defaultValue;
-    }
-  });
-
-  const setStoredValue = (newValue: T) => {
-    setValue(newValue);
-    localStorage.setItem(key, JSON.stringify(newValue));
-  };
-
-  return [value, setStoredValue];
-}
+import CaptionPanel from './components/CaptionPanel';
 
 const DEFAULT_MASTERPIECE_TAGS = 'masterpiece, best quality, highres, ultra-detailed';
 const BREAST_SIZES = ['flat', 'small', 'medium', 'large', 'huge', 'gigantic'];
@@ -66,6 +50,7 @@ const App: React.FC = () => {
   const [useDAMode, setUseDAMode] = useLocalStorage('imagedna:useDAMode', false);
   const [daTagLimit, setDaTagLimit] = useLocalStorage('imagedna:daTagLimit', 30);
   const [selectedModel, setSelectedModel] = useLocalStorage<string>('imagedna:selectedModel', TAGGER_MODELS[0].id);
+  const [captionQuantization, setCaptionQuantization] = useLocalStorage<CaptionQuantization>('imagedna:captionQuantization', '4bit');
   const [copied, setCopied] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -227,6 +212,8 @@ const App: React.FC = () => {
         selectedModel={selectedModel}
         setSelectedModel={setSelectedModel}
         taggerModels={TAGGER_MODELS}
+        captionQuantization={captionQuantization}
+        setCaptionQuantization={setCaptionQuantization}
       />
       
       {currentView === 'promptGenerator' && (
@@ -401,6 +388,11 @@ const App: React.FC = () => {
                   )}
                 </div>
 
+                <CaptionPanel
+                  imageFile={currentFile}
+                  knownTags={result.tags.map(t => t.label)}
+                  quantization={captionQuantization}
+                />
               </div>
             )}
 

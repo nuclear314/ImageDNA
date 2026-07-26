@@ -28,12 +28,19 @@ The app has four main views toggled from the header:
 - `GET /api/tags` — returns full tag vocabulary for the active model
 - `POST /api/exif` — accepts image file, returns structured EXIF metadata and PNG text chunks (including Stable Diffusion `parameters`)
 - `GET /api/status` — returns `{status, model}` reflecting tagger load state (`idle`/`downloading`/`ready`/`error`); polled by the Windows launcher and the frontend's processing view, never triggers loading itself
+- `POST /api/caption` — Step 2 natural-language captioning. Accepts image file + mode/tone/quantization/extra_options/known_tags, returns `{caption, prompt_used}`; 503s with `{"error": "missing_dependencies"}` if `requirements-joycaption.txt` isn't installed
+- `GET /api/caption-status` — returns `_caption_state` (`{status, model, error}`), polled by the frontend while a caption is composing
 
 **Model loading:** the default tagger model starts loading in a background thread as soon as `server.py`
 boots, rather than lazily on first `/api/tag`/`/api/tags` request — this pre-warms the Windows launcher's
-startup wait and makes Docker readiness reflect real usability sooner.
+startup wait and makes Docker readiness reflect real usability sooner. The JoyCaption captioner is the
+opposite: it's heavy/optional (`torch`/`transformers`/`bitsandbytes`) and is **never** eager-loaded —
+`get_captioner()` in `server.py` lazily imports `joycaptioner.py` only on the first `/api/caption` call,
+so a CPU-only / lightweight deployment never pulls those dependencies in. Switching the quantization
+setting mid-session calls `JoyCaptioner.unload()` on the previously cached instance (freeing its CUDA
+memory) before loading the replacement — only one captioner instance is ever resident at a time.
 
-**State persistence:** React `useState` + `localStorage`, all keys prefixed `imagedna:`
+**State persistence:** React `useState` + `localStorage` (hook lives in `lib/useLocalStorage.ts`), all keys prefixed `imagedna:`
 
 ## Key Files
 
@@ -42,12 +49,16 @@ startup wait and makes Docker readiness reflect real usability sooner.
 | `App.tsx` | Root component — global state, image upload, tag filtering logic |
 | `server.py` | Flask server and API endpoint handlers |
 | `tagger.py` | `WD14Tagger` class — HF model download, image preprocessing, ONNX inference |
+| `joycaptioner.py` | `JoyCaptioner` class — Step 2 natural-language captioning via JoyCaption Beta One (lazy-imported, optional GPU dependency) |
 | `components/BulkTagger.tsx` | Bulk view — multi-file queue, sequential `/api/tag` processing, zip export |
 | `components/PromptGenerator.tsx` | Tag vocabulary loading, priority-group prompt generation |
 | `components/ExifExtractor.tsx` | EXIF/PNG metadata extraction view — parses and splits SD generation parameters |
+| `components/CaptionPanel.tsx` | Step 2 card — mode/tone selection, extra-detail toggles, calls `/api/caption`, displays the composed caption |
 | `lib/tagFiltering.ts` | Pure tag filter/format pipeline (threshold, exclude, masterpiece, breast consolidation), shared by the single-image and bulk flows |
 | `lib/exportZip.ts` | Builds a downloadable zip of image + matching `.txt` caption pairs (JSZip) |
-| `components/SettingsModal.tsx` | Model selection, feature toggles (masterpiece, underscores, breast consolidation, DA mode) |
+| `lib/useLocalStorage.ts` | Shared `useLocalStorage` hook (extracted from `App.tsx`) used by `App.tsx` and `CaptionPanel.tsx` |
+| `lib/captionOptions.ts` | Frontend catalog of JoyCaption modes and curated "extra option" toggles |
+| `components/SettingsModal.tsx` | Model selection, feature toggles (masterpiece, underscores, breast consolidation, DA mode), JoyCaption quantization |
 | `components/SettingsPanel.tsx` | Confidence threshold slider and exclude tags textarea |
 | `components/InfoBauble.tsx` | Reusable hoverable tooltip `(i)` component |
 | `components/TagGrid.tsx` | Renders tags as color-coded chips with confidence % |
@@ -76,6 +87,12 @@ Image upload → `POST /api/exif` → Pillow reads `img.getexif()` (JPEG EXIF) +
 
 **Image preprocessing (tagger.py):**
 RGBA → RGB (white background) → pad to square → resize 448×448 → BGR float32 array
+
+**Natural-language captioning (Step 2):**
+Extracted tags (Step 1) → `POST /api/caption` → JoyCaption Beta One (grounded in tags, via
+`joycaptioner.py`) → textarea + copy button in `CaptionPanel`. Optional and additive — requires
+`pip install -r requirements-joycaption.txt` and an NVIDIA GPU; not bundled into the Windows standalone
+build (see README's "Step 2: Natural Language Captioning" section).
 
 ## Available Models
 

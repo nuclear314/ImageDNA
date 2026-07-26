@@ -14,6 +14,27 @@ ImageDNA uses the [WD14 tagger model](https://huggingface.co/SmilingWolf/wd-eva0
 
 The frontend is built with React and the backend uses Flask with ONNX Runtime for model inference. The WD14 model is automatically downloaded from Hugging Face on first run.
 
+## Step 2: Natural Language Captioning
+
+After tagging an image, an optional **Step 2** card lets you compose a natural-language caption with
+[JoyCaption Beta One](https://github.com/fpgaminer/joycaption), grounded in the WD14 tags extracted in
+Step 1 rather than having it guess from pixels alone — the same WD14 + JoyCaption workflow commonly used
+for anime LoRA/dataset captioning. Choose a mode (Descriptive, Straightforward, SD-style Prompt,
+MidJourney, Social Media), optionally toggle extra details (lighting, camera angle, rating, etc.), and
+click **Compose Natural Language Prompt**.
+
+This feature is additive and optional:
+
+- **Install:** `pip install -r requirements-joycaption.txt` (in addition to `requirements.txt`). Requires
+  an NVIDIA GPU; first use downloads the JoyCaption model (~6–17GB depending on quantization) from
+  Hugging Face.
+- **Quantization:** Settings → Natural Language Captioning lets you pick 4-bit (fastest, ~6GB VRAM),
+  8-bit (~10GB VRAM), or full bf16 precision (~17GB VRAM, best quality).
+- Without `requirements-joycaption.txt` installed, the Step 2 card shows a clear "missing dependencies"
+  message and the rest of the app (WD14 tagging, EXIF extraction, prompt generation) is unaffected.
+- **Not currently supported in the Windows standalone build** — `torch`/`transformers`/`bitsandbytes` are
+  not bundled into the PyInstaller executable. Use the Docker or dev-server setup for Step 2.
+
 ## Random Prompt Generator
 
 Click the **dice icon** in the top-left header to switch to the Random Prompt Generator. This tool builds structured prompts from the selected model's tag vocabulary.

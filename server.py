@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import tempfile
@@ -17,6 +18,10 @@ _taggers = {}  # Cache taggers by model name
 _tagger_lock = threading.Lock()
 _model_state = {"status": "idle", "model": None}  # idle | downloading | ready | error
 
+_captioner = None
+_captioner_lock = threading.Lock()
+_caption_state = {"status": "idle", "model": None, "error": None}
+
 
 def get_tagger(model_name=None):
     global _taggers
@@ -34,6 +39,38 @@ def get_tagger(model_name=None):
                 raise
             _model_state["status"] = "ready"
         return _taggers[model_name]
+
+
+def get_captioner(quantization="4bit"):
+    global _captioner
+    with _captioner_lock:
+        if _captioner is not None and _captioner.quantization == quantization:
+            return _captioner
+        _caption_state["status"] = "downloading"
+        _caption_state["model"] = "fancyfeast/llama-joycaption-beta-one-hf-llava"
+        _caption_state["error"] = None
+        try:
+            from joycaptioner import JoyCaptioner
+        except ImportError:
+            _caption_state["status"] = "error"
+            _caption_state["error"] = "missing_dependencies"
+            raise
+        if _captioner is not None:
+            # Switching quantization: release the old model's GPU memory before
+            # loading the replacement so the two are never resident at once.
+            try:
+                _captioner.unload()
+            except Exception:
+                pass
+            _captioner = None
+        try:
+            _captioner = JoyCaptioner(quantization=quantization)
+        except Exception as e:
+            _caption_state["status"] = "error"
+            _caption_state["error"] = str(e)
+            raise
+        _caption_state["status"] = "ready"
+        return _captioner
 
 
 @app.route('/api/tag', methods=['POST'])
@@ -56,6 +93,54 @@ def tag_image():
         return jsonify(results)
     finally:
         os.unlink(tmp_path)
+
+
+@app.route('/api/caption', methods=['POST'])
+def caption_image():
+    if 'image' not in request.files:
+        return jsonify({"error": "No image provided"}), 400
+
+    file = request.files['image']
+    mode = request.form.get('mode', 'descriptive')
+    tone = request.form.get('tone', 'casual')
+    quantization = request.form.get('quantization', '4bit')
+
+    extra_options_raw = request.form.get('extra_options')
+    try:
+        extra_options = json.loads(extra_options_raw) if extra_options_raw else []
+    except (json.JSONDecodeError, TypeError):
+        return jsonify({"error": "invalid_extra_options"}), 400
+
+    known_tags_raw = request.form.get('known_tags')
+    known_tags = [t.strip() for t in known_tags_raw.split(',') if t.strip()] if known_tags_raw else None
+
+    suffix = os.path.splitext(file.filename)[1] or '.png'
+    fd, tmp_path = tempfile.mkstemp(suffix=suffix)
+    os.close(fd)
+
+    try:
+        file.stream.seek(0)
+        file.save(tmp_path)
+        try:
+            captioner = get_captioner(quantization)
+        except ImportError:
+            return jsonify({
+                "error": "missing_dependencies",
+                "message": "pip install -r requirements-joycaption.txt (requires an NVIDIA GPU)",
+            }), 503
+        caption, prompt_used = captioner.caption_image(
+            tmp_path, mode=mode, tone=tone, extra_options=extra_options, known_tags=known_tags,
+        )
+        return jsonify({"caption": caption, "prompt_used": prompt_used})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        os.unlink(tmp_path)
+
+
+@app.route('/api/caption-status', methods=['GET'])
+def caption_status():
+    return jsonify(_caption_state)
 
 
 def _serialize_exif_value(value):
