@@ -32,21 +32,29 @@ const BulkTagger: React.FC<BulkTaggerProps> = ({
   const [isZipping, setIsZipping] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const previewUrlsRef = useRef<string[]>([]);
+  const processingIdRef = useRef<string | null>(null);
+  const isMountedRef = useRef(true);
 
   // Preview URLs live for as long as the tab is mounted; revoke them all when it goes away
   // (either the user switches views or closes the app) rather than tracking each individually.
   useEffect(() => {
-    return () => { previewUrlsRef.current.forEach(url => URL.revokeObjectURL(url)); };
+    return () => {
+      isMountedRef.current = false;
+      previewUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
+    };
   }, []);
 
   // Sequential processing: one item in flight at a time. Re-fires whenever `items` changes
   // (a new queued item appears, or the current one finishes) until nothing is left to do.
+  // Concurrency is gated by `processingIdRef`, not by scanning `items` for a 'processing'
+  // status — the setItems call below changes `items` (this effect's own dependency), which
+  // would otherwise tear down and re-run the effect mid-fetch and falsely cancel it.
   useEffect(() => {
-    if (items.some(i => i.status === 'processing')) return;
+    if (processingIdRef.current) return;
     const next = items.find(i => i.status === 'queued');
     if (!next) return;
 
-    let cancelled = false;
+    processingIdRef.current = next.id;
     setItems(prev => prev.map(i => i.id === next.id ? { ...i, status: 'processing' as const } : i));
 
     (async () => {
@@ -68,16 +76,16 @@ const BulkTagger: React.FC<BulkTaggerProps> = ({
           })),
         ];
 
-        if (cancelled) return;
+        if (!isMountedRef.current) return;
         setItems(prev => prev.map(i => i.id === next.id ? { ...i, status: 'done' as const, rawTags } : i));
       } catch (err) {
-        if (cancelled) return;
+        if (!isMountedRef.current) return;
         const message = err instanceof Error ? err.message : 'Tagging failed';
         setItems(prev => prev.map(i => i.id === next.id ? { ...i, status: 'error' as const, error: message } : i));
+      } finally {
+        processingIdRef.current = null;
       }
     })();
-
-    return () => { cancelled = true; };
   }, [items, selectedModel]);
 
   const addFile = (file: File) => {
