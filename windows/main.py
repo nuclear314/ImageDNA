@@ -88,6 +88,11 @@ if not server_ready:
     sys.exit(1)
 
 try:
+    # Off by default in pywebview — without it, WebView2 silently cancels every
+    # download (e.g. the Bulk Tagger's "Download All (.zip)"). Enabling it makes
+    # WebView2 show its own native Save-As dialog per download, defaulting to the
+    # user's Downloads folder.
+    webview.settings['ALLOW_DOWNLOADS'] = True
     window = webview.create_window(
         'ImageDNA', 'http://127.0.0.1:5000',
         width=1280, height=900, min_size=(900, 650))

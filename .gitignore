@@ -24,7 +24,7 @@ dist-ssr
 *.sln
 *.sw?
 .claude/*
-__pycache__/*
+__pycache__/
 
 # Windows standalone build output
 release/
