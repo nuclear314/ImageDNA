@@ -9,7 +9,7 @@ import {
   Tag as TagIcon,
   Sliders
 } from 'lucide-react';
-import { AppState, AppView, Tag, CaptionQuantization } from './types';
+import { AppState, AppView, Tag, CaptionQuantization, CaptionCapability } from './types';
 import { filterAndFormatTags } from './lib/tagFiltering';
 import { useLocalStorage } from './lib/useLocalStorage';
 
@@ -27,7 +27,7 @@ import CaptionPanel from './components/CaptionPanel';
 
 const DEFAULT_MASTERPIECE_TAGS = 'masterpiece, best quality, highres, ultra-detailed';
 const BREAST_SIZES = ['flat', 'small', 'medium', 'large', 'huge', 'gigantic'];
-const APP_VERSION = 'v2.1';
+const APP_VERSION = 'v2.2';
 
 const TAGGER_MODELS = [
   { id: 'SmilingWolf/wd-eva02-large-tagger-v3', name: 'EVA02 Large v3', description: 'Best accuracy (default)' },
@@ -57,6 +57,7 @@ const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [currentView, setCurrentView] = useState<AppView>('tagger');
   const [modelStatus, setModelStatus] = useState<{ status: string; model: string | null } | null>(null);
+  const [captionCapability, setCaptionCapability] = useState<CaptionCapability | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -66,6 +67,17 @@ const App: React.FC = () => {
       document.documentElement.classList.remove('dark');
     }
   }, [isDarkMode]);
+
+  // One-time check (not polled — GPU presence can't change during a running session)
+  // backing the header's fast/slow caption speed indicator.
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/caption-capability')
+      .then((res) => res.json())
+      .then((data) => { if (!cancelled) setCaptionCapability(data); })
+      .catch(() => { /* leave as null — badge just stays hidden */ });
+    return () => { cancelled = true; };
+  }, []);
 
   // Poll model load status while interrogating, so the processing screen can show a
   // real "downloading the model" message on a first-run cold start instead of a fake
@@ -192,7 +204,7 @@ const App: React.FC = () => {
         className="hidden"
         accept="image/*"
       />
-      <Header isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} onSettingsClick={() => setIsSettingsOpen(true)} currentView={currentView} onViewChange={setCurrentView} />
+      <Header isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} onSettingsClick={() => setIsSettingsOpen(true)} currentView={currentView} onViewChange={setCurrentView} captionCapability={captionCapability} />
 
       <SettingsModal
         isOpen={isSettingsOpen}

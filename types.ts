@@ -54,3 +54,10 @@ export interface CaptionModeOption {
   label: string;
   description: string;
 }
+
+// Hardware/dependency check backing the header's caption-speed indicator —
+// distinct from CaptionStatus, which tracks an in-flight compose/load.
+export interface CaptionCapability {
+  available: boolean;
+  cuda: boolean;
+}

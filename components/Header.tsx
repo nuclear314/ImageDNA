@@ -1,7 +1,8 @@
 
 import React from 'react';
 import { Fingerprint, Github, Sun, Moon, Settings, Dices, ScanLine, Layers } from 'lucide-react';
-import { AppView } from '../types';
+import { AppView, CaptionCapability } from '../types';
+import InfoBauble from './InfoBauble';
 
 interface HeaderProps {
   isDarkMode: boolean;
@@ -9,9 +10,10 @@ interface HeaderProps {
   onSettingsClick: () => void;
   currentView: AppView;
   onViewChange: (view: AppView) => void;
+  captionCapability: CaptionCapability | null;
 }
 
-const Header: React.FC<HeaderProps> = ({ isDarkMode, setIsDarkMode, onSettingsClick, currentView, onViewChange }) => {
+const Header: React.FC<HeaderProps> = ({ isDarkMode, setIsDarkMode, onSettingsClick, currentView, onViewChange, captionCapability }) => {
   return (
     <header className="border-b border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-[#09090b]/50 backdrop-blur-md sticky top-0 z-50 transition-colors">
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -57,6 +59,27 @@ const Header: React.FC<HeaderProps> = ({ isDarkMode, setIsDarkMode, onSettingsCl
           </nav>
           
           <div className="flex items-center gap-3">
+            {captionCapability && (
+              <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border shadow-sm text-xs font-medium ${
+                captionCapability.cuda
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+                  : 'bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400'
+              }`}>
+                <div className={`w-1.5 h-1.5 rounded-full ${captionCapability.cuda ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                <span className="hidden lg:inline">{captionCapability.cuda ? 'Fast Caption' : 'Slow Caption'}</span>
+                <InfoBauble
+                  placement="bottom-right"
+                  width="w-72"
+                  text={
+                    captionCapability.cuda
+                      ? 'An NVIDIA GPU was detected. Step 2 natural-language captioning (JoyCaption) will run at normal speed.'
+                      : captionCapability.available
+                        ? 'No NVIDIA GPU was detected. Step 2 natural-language captioning (JoyCaption) will fall back to CPU, which can take several minutes per image.'
+                        : "JoyCaption's dependencies aren't installed (pip install -r requirements-joycaption.txt). Once installed, captioning only runs at normal speed if an NVIDIA GPU is detected."
+                  }
+                />
+              </div>
+            )}
             <button
               onClick={onSettingsClick}
               className="p-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-white transition-all border border-zinc-200 dark:border-zinc-700 shadow-sm"

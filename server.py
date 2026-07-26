@@ -21,6 +21,7 @@ _model_state = {"status": "idle", "model": None}  # idle | downloading | ready |
 _captioner = None
 _captioner_lock = threading.Lock()
 _caption_state = {"status": "idle", "model": None, "error": None}
+_caption_capability = None  # cached: hardware never changes at runtime
 
 
 def get_tagger(model_name=None):
@@ -71,6 +72,28 @@ def get_captioner(quantization="4bit"):
             raise
         _caption_state["status"] = "ready"
         return _captioner
+
+
+def get_caption_capability():
+    # Cheap hardware/dependency check for the Step 2 speed indicator — just
+    # imports torch and asks about CUDA, never touches JoyCaption's model
+    # weights, so it's safe to call on every page load without triggering a
+    # download or holding _captioner_lock.
+    global _caption_capability
+    if _caption_capability is not None:
+        return _caption_capability
+    try:
+        import torch
+    except ImportError:
+        _caption_capability = {"available": False, "cuda": False}
+        return _caption_capability
+    _caption_capability = {"available": True, "cuda": torch.cuda.is_available()}
+    return _caption_capability
+
+
+@app.route('/api/caption-capability', methods=['GET'])
+def caption_capability():
+    return jsonify(get_caption_capability())
 
 
 @app.route('/api/tag', methods=['POST'])

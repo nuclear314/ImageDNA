@@ -30,6 +30,7 @@ The app has four main views toggled from the header:
 - `GET /api/status` — returns `{status, model}` reflecting tagger load state (`idle`/`downloading`/`ready`/`error`); polled by the Windows launcher and the frontend's processing view, never triggers loading itself
 - `POST /api/caption` — Step 2 natural-language captioning. Accepts image file + mode/tone/quantization/extra_options/known_tags, returns `{caption, prompt_used}`; 503s with `{"error": "missing_dependencies"}` if `requirements-joycaption.txt` isn't installed
 - `GET /api/caption-status` — returns `_caption_state` (`{status, model, error}`), polled by the frontend while a caption is composing
+- `GET /api/caption-capability` — returns `{available, cuda}` (dependencies installed / GPU detected), a cheap cached check (just `import torch` + `torch.cuda.is_available()`, no model weights touched); backs the header's fast/slow caption speed badge, fetched once on app load
 
 **Model loading:** the default tagger model starts loading in a background thread as soon as `server.py`
 boots, rather than lazily on first `/api/tag`/`/api/tags` request — this pre-warms the Windows launcher's
