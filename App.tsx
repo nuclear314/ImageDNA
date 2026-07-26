@@ -51,6 +51,7 @@ const App: React.FC = () => {
   const [useDAMode, setUseDAMode] = useLocalStorage('imagedna:useDAMode', false);
   const [daTagLimit, setDaTagLimit] = useLocalStorage('imagedna:daTagLimit', 30);
   const [selectedModel, setSelectedModel] = useLocalStorage<string>('imagedna:selectedModel', TAGGER_MODELS[0].id);
+  const [enableJoyCaption, setEnableJoyCaption] = useLocalStorage('imagedna:enableJoyCaption', false);
   const [captionQuantization, setCaptionQuantization] = useLocalStorage<CaptionQuantization>('imagedna:captionQuantization', '4bit');
   const [copied, setCopied] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -204,7 +205,7 @@ const App: React.FC = () => {
         className="hidden"
         accept="image/*"
       />
-      <Header isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} onSettingsClick={() => setIsSettingsOpen(true)} currentView={currentView} onViewChange={setCurrentView} captionCapability={captionCapability} />
+      <Header isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} onSettingsClick={() => setIsSettingsOpen(true)} currentView={currentView} onViewChange={setCurrentView} captionCapability={enableJoyCaption ? captionCapability : null} />
 
       <SettingsModal
         isOpen={isSettingsOpen}
@@ -225,6 +226,8 @@ const App: React.FC = () => {
         selectedModel={selectedModel}
         setSelectedModel={setSelectedModel}
         taggerModels={TAGGER_MODELS}
+        enableJoyCaption={enableJoyCaption}
+        setEnableJoyCaption={setEnableJoyCaption}
         captionQuantization={captionQuantization}
         setCaptionQuantization={setCaptionQuantization}
       />
@@ -401,11 +404,13 @@ const App: React.FC = () => {
                   )}
                 </div>
 
-                <CaptionPanel
-                  imageFile={currentFile}
-                  knownTags={result.tags.map(t => t.label)}
-                  quantization={captionQuantization}
-                />
+                {enableJoyCaption && (
+                  <CaptionPanel
+                    imageFile={currentFile}
+                    knownTags={result.tags.map(t => t.label)}
+                    quantization={captionQuantization}
+                  />
+                )}
               </div>
             )}
 

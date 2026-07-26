@@ -28,6 +28,12 @@ This feature is additive and optional:
 - **Install:** `pip install -r requirements-joycaption.txt` (in addition to `requirements.txt`). Requires
   an NVIDIA GPU; first use downloads the JoyCaption model (~6–17GB depending on quantization) from
   Hugging Face.
+- **GPU build of torch:** `requirements-joycaption.txt` pins a bare `torch>=2.3.0` so it installs on any
+  machine, but plain `pip install torch` from PyPI resolves to a **CPU-only** wheel — PyTorch's CUDA
+  builds are too large for PyPI and only live on their own index. If the header's caption-speed badge
+  shows "Slow Caption" despite having an NVIDIA GPU, reinstall torch from that index, e.g.:
+  `pip install --index-url https://download.pytorch.org/whl/cu126 torch==<installed-version> --force-reinstall`
+  (check available CUDA tags/versions with `pip index versions torch --index-url https://download.pytorch.org/whl/cu126`).
 - **Quantization:** Settings → Natural Language Captioning lets you pick 4-bit (fastest, ~6GB VRAM),
   8-bit (~10GB VRAM), or full bf16 precision (~17GB VRAM, best quality).
 - Without `requirements-joycaption.txt` installed, the Step 2 card shows a clear "missing dependencies"
@@ -162,6 +168,26 @@ named volume so the model survives across `docker run` recreations:
 ```bash
 docker run -p 5000:5000 -e HF_HOME=/cache -v imagedna-cache:/cache imagedna
 ```
+
+### Enabling Step 2 (JoyCaption) in Docker
+
+Off by default — the image above is CPU-only and doesn't install `torch`/`transformers`/`bitsandbytes` at
+all, since most users don't need the multi-GB GPU-captioning stack. To opt in, build with
+`WITH_JOYCAPTION=true` and run with `--gpus all`:
+
+```bash
+docker build --build-arg WITH_JOYCAPTION=true -t imagedna-joycaption .
+docker run --gpus all -p 5000:5000 imagedna-joycaption
+```
+
+**Prerequisites for the GPU build:** an NVIDIA GPU and the
+[NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+installed on the Docker host (this is what makes `--gpus all` work). No CUDA base image is needed — the
+`torch` wheel installed from PyTorch's `cu126` index bundles its own CUDA runtime libraries; the container
+toolkit just needs to expose the host's NVIDIA driver into the container.
+
+Without `WITH_JOYCAPTION=true`, the Step 2 card in the running app shows its normal "missing dependencies"
+message and everything else (WD14 tagging, EXIF extraction, prompt generation) works as usual.
 
 ## How to build the Windows standalone app
 

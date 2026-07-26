@@ -8,9 +8,12 @@ ImageDNA is a full-stack web application for extracting semantic tags from image
 
 **Frontend:** React 19 + TypeScript, Vite 6, Tailwind CSS (`@tailwindcss/vite`, built not CDN), Lucide-react icons
 **Backend:** Python 3.12+, Flask + waitress, ONNX Runtime, Hugging Face Hub, Pillow, NumPy
-**Dev/Prod:** Docker (multi-stage), Vite dev proxy routes `/api` → Flask on port 5000. A separate `windows/`
-standalone build (PyInstaller + embedded Python + pywebview) also exists — see README's "How to build the
-Windows standalone app" section.
+**Dev/Prod:** Docker (multi-stage), Vite dev proxy routes `/api` → Flask on port 5000. The Dockerfile takes a
+`WITH_JOYCAPTION` build arg (`false` by default) — off, it's the CPU-only image with no torch/transformers/
+bitsandbytes; `--build-arg WITH_JOYCAPTION=true` installs those from PyTorch's CUDA (`cu126`) wheel index
+instead of plain PyPI (which resolves to a CPU-only wheel), for use with `docker run --gpus all`. A separate
+`windows/` standalone build (PyInstaller + embedded Python + pywebview) also exists — see README's "How to
+build the Windows standalone app" section.
 
 ## Architecture
 
@@ -93,7 +96,11 @@ RGBA → RGB (white background) → pad to square → resize 448×448 → BGR fl
 Extracted tags (Step 1) → `POST /api/caption` → JoyCaption Beta One (grounded in tags, via
 `joycaptioner.py`) → textarea + copy button in `CaptionPanel`. Optional and additive — requires
 `pip install -r requirements-joycaption.txt` and an NVIDIA GPU; not bundled into the Windows standalone
-build (see README's "Step 2: Natural Language Captioning" section).
+build (see README's "Step 2: Natural Language Captioning" section). Installing plain `torch` from PyPI
+resolves to a CPU-only wheel (PyTorch's CUDA builds are too large for PyPI and only live on PyTorch's own
+`cu126` index) — the `/api/caption-capability` badge reads "Slow Caption" whenever `torch.cuda.is_available()`
+is `False`, which includes this case even on a machine with a working NVIDIA GPU. In Docker this is handled
+by the `WITH_JOYCAPTION` build arg (see Tech Stack); for bare venvs, see README's "GPU build of torch" note.
 
 ## Available Models
 
@@ -122,7 +129,11 @@ npm run dev
 # Backend (separate terminal)
 python server.py
 
-# Docker (production)
+# Docker (production, CPU-only — default)
 docker build -t imagedna .
 docker run -p 5000:5000 imagedna
+
+# Docker with Step 2 (JoyCaption) enabled — requires NVIDIA GPU + NVIDIA Container Toolkit
+docker build --build-arg WITH_JOYCAPTION=true -t imagedna-joycaption .
+docker run --gpus all -p 5000:5000 imagedna-joycaption
 ```
