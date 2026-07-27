@@ -32,3 +32,4 @@ windows/build/
 windows/cache/
 windows/_server_backup/
 WINDOWS_JOYCAPTION_GGUF.md
+LINUX_STANDALONE_BUILD.md
