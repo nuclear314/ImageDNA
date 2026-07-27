@@ -35,6 +35,14 @@ const TAGGER_MODELS = [
   { id: 'SmilingWolf/wd-swinv2-tagger-v3', name: 'SwinV2 v3', description: 'Fast and efficient' },
 ] as const;
 
+// Windows-only (KoboldCpp/GGUF backend) — ignored by the transformers backend
+// (Docker/dev), which only ever has one caption model. IDs must match the keys
+// of joycaptioner_kobold.py's KOBOLD_CAPTION_MODELS catalog.
+const KOBOLD_CAPTION_MODELS = [
+  { id: 'joycaption-beta-one', name: 'JoyCaption Beta One', description: 'General-purpose descriptive captioning (default)' },
+  { id: 'nsfwvision-v5', name: 'NSFWVision v5 (Qwen3.5 9B)', description: 'NSFW-oriented captioning' },
+] as const;
+
 const App: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useLocalStorage('imagedna:darkMode', true);
   const [state, setState] = useState<AppState>(AppState.IDLE);
@@ -53,6 +61,7 @@ const App: React.FC = () => {
   const [selectedModel, setSelectedModel] = useLocalStorage<string>('imagedna:selectedModel', TAGGER_MODELS[0].id);
   const [enableJoyCaption, setEnableJoyCaption] = useLocalStorage('imagedna:enableJoyCaption', false);
   const [captionQuantization, setCaptionQuantization] = useLocalStorage<CaptionQuantization>('imagedna:captionQuantization', '4bit');
+  const [captionModel, setCaptionModel] = useLocalStorage<string>('imagedna:captionModel', KOBOLD_CAPTION_MODELS[0].id);
   const [copied, setCopied] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -75,9 +84,21 @@ const App: React.FC = () => {
     let cancelled = false;
     fetch('/api/caption-capability')
       .then((res) => res.json())
-      .then((data) => { if (!cancelled) setCaptionCapability(data); })
+      .then((data: CaptionCapability) => {
+        if (cancelled) return;
+        setCaptionCapability(data);
+        // A stored quantization from before this backend was detected (or from
+        // switching machines) may belong to the other backend's disjoint value
+        // set — reset to that backend's own default rather than sending a
+        // meaningless value to /api/caption.
+        const validQuants = data.backend === 'kobold' ? ['Q4_K_M', 'Q5_K_M', 'Q6_K'] : ['4bit', '8bit', 'bf16'];
+        if (!validQuants.includes(captionQuantization)) {
+          setCaptionQuantization((data.backend === 'kobold' ? 'Q4_K_M' : '4bit') as CaptionQuantization);
+        }
+      })
       .catch(() => { /* leave as null — badge just stays hidden */ });
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Poll model load status while interrogating, so the processing screen can show a
@@ -227,9 +248,26 @@ const App: React.FC = () => {
         setSelectedModel={setSelectedModel}
         taggerModels={TAGGER_MODELS}
         enableJoyCaption={enableJoyCaption}
-        setEnableJoyCaption={setEnableJoyCaption}
+        setEnableJoyCaption={(val) => {
+          setEnableJoyCaption(val);
+          if (val) {
+            // Kick off the (potentially multi-GB, kobold-backend) download/load in
+            // the background as soon as the user opts in, rather than waiting for
+            // their first Compose click — progress surfaces via CaptionPanel's
+            // existing /api/caption-status poll.
+            fetch('/api/caption-enable', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ quantization: captionQuantization, caption_model: captionModel }),
+            }).catch(() => { /* best-effort — errors surface via /api/caption-status */ });
+          }
+        }}
         captionQuantization={captionQuantization}
         setCaptionQuantization={setCaptionQuantization}
+        captionCapability={captionCapability}
+        captionModel={captionModel}
+        setCaptionModel={setCaptionModel}
+        captionModels={KOBOLD_CAPTION_MODELS}
       />
       
       {currentView === 'promptGenerator' && (
@@ -409,6 +447,7 @@ const App: React.FC = () => {
                     imageFile={currentFile}
                     knownTags={result.tags.map(t => t.label)}
                     quantization={captionQuantization}
+                    captionModel={captionCapability?.backend === 'kobold' ? captionModel : null}
                   />
                 )}
               </div>

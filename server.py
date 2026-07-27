@@ -18,10 +18,21 @@ _taggers = {}  # Cache taggers by model name
 _tagger_lock = threading.Lock()
 _model_state = {"status": "idle", "model": None}  # idle | downloading | ready | error
 
+# Set by windows/main.py for the packaged standalone build only — a bare `python
+# server.py` dev run (even on Windows) and Docker both leave this unset, so they
+# keep the transformers/bitsandbytes path unchanged.
+CAPTION_BACKEND = os.environ.get('IMAGEDNA_CAPTION_BACKEND', 'transformers')
+
 _captioner = None
 _captioner_lock = threading.Lock()
-_caption_state = {"status": "idle", "model": None, "error": None}
+_caption_state = {"status": "idle", "model": None, "error": None, "stage": None}
 _caption_capability = None  # cached: hardware never changes at runtime
+
+
+def _kobold_progress(stage, detail):
+    _caption_state["stage"] = stage
+    if detail:
+        _caption_state["model"] = detail
 
 
 def get_tagger(model_name=None):
@@ -42,52 +53,87 @@ def get_tagger(model_name=None):
         return _taggers[model_name]
 
 
-def get_captioner(quantization="4bit"):
+def get_captioner(quantization=None, model_id=None):
     global _captioner
     with _captioner_lock:
-        if _captioner is not None and _captioner.quantization == quantization:
-            return _captioner
+        if CAPTION_BACKEND == 'kobold':
+            from joycaptioner_kobold import DEFAULT_MODEL_ID, DEFAULT_QUANT
+            model_id = model_id or DEFAULT_MODEL_ID
+            quantization = quantization or DEFAULT_QUANT
+            if (_captioner is not None and getattr(_captioner, 'model_id', None) == model_id
+                    and _captioner.quantization == quantization):
+                return _captioner
+        else:
+            quantization = quantization or '4bit'
+            if _captioner is not None and _captioner.quantization == quantization:
+                return _captioner
+
         _caption_state["status"] = "downloading"
-        _caption_state["model"] = "fancyfeast/llama-joycaption-beta-one-hf-llava"
         _caption_state["error"] = None
+        _caption_state["stage"] = None
+        _caption_state["model"] = model_id if CAPTION_BACKEND == 'kobold' else "fancyfeast/llama-joycaption-beta-one-hf-llava"
+
         try:
-            from joycaptioner import JoyCaptioner
+            if CAPTION_BACKEND == 'kobold':
+                from joycaptioner_kobold import JoyCaptionerKobold
+            else:
+                from joycaptioner import JoyCaptioner
         except ImportError:
             _caption_state["status"] = "error"
             _caption_state["error"] = "missing_dependencies"
             raise
+
         if _captioner is not None:
-            # Switching quantization: release the old model's GPU memory before
-            # loading the replacement so the two are never resident at once.
+            # Switching model/quantization: release the old backend's resources
+            # (GPU memory, or the KoboldCpp subprocess) before starting the
+            # replacement so the two are never resident at once.
             try:
                 _captioner.unload()
             except Exception:
                 pass
             _captioner = None
         try:
-            _captioner = JoyCaptioner(quantization=quantization)
+            if CAPTION_BACKEND == 'kobold':
+                _captioner = JoyCaptionerKobold(model_id=model_id, quantization=quantization, on_progress=_kobold_progress)
+            else:
+                _captioner = JoyCaptioner(quantization=quantization)
         except Exception as e:
             _caption_state["status"] = "error"
             _caption_state["error"] = str(e)
             raise
         _caption_state["status"] = "ready"
+        _caption_state["stage"] = None
         return _captioner
 
 
+def _try_get_captioner(quantization, model_id):
+    try:
+        get_captioner(quantization, model_id)
+    except Exception:
+        pass  # errors are already surfaced via _caption_state for /api/caption-status to report
+
+
 def get_caption_capability():
-    # Cheap hardware/dependency check for the Step 2 speed indicator — just
-    # imports torch and asks about CUDA, never touches JoyCaption's model
-    # weights, so it's safe to call on every page load without triggering a
-    # download or holding _captioner_lock.
+    # Cheap hardware/dependency check for the Step 2 speed indicator — never
+    # touches JoyCaption's model weights, so it's safe to call on every page
+    # load without triggering a download or holding _captioner_lock.
     global _caption_capability
     if _caption_capability is not None:
+        return _caption_capability
+    if CAPTION_BACKEND == 'kobold':
+        try:
+            from joycaptioner_kobold import detect_capability
+            _caption_capability = detect_capability()
+        except ImportError:
+            _caption_capability = {"backend": "kobold", "available": False, "cuda": False, "gpu_vendor": "none"}
         return _caption_capability
     try:
         import torch
     except ImportError:
-        _caption_capability = {"available": False, "cuda": False}
+        _caption_capability = {"backend": "transformers", "available": False, "cuda": False, "gpu_vendor": "none"}
         return _caption_capability
-    _caption_capability = {"available": True, "cuda": torch.cuda.is_available()}
+    cuda = torch.cuda.is_available()
+    _caption_capability = {"backend": "transformers", "available": True, "cuda": cuda, "gpu_vendor": "nvidia" if cuda else "none"}
     return _caption_capability
 
 
@@ -126,7 +172,8 @@ def caption_image():
     file = request.files['image']
     mode = request.form.get('mode', 'descriptive')
     tone = request.form.get('tone', 'casual')
-    quantization = request.form.get('quantization', '4bit')
+    quantization = request.form.get('quantization') or None
+    caption_model = request.form.get('caption_model') or None  # kobold backend only
 
     extra_options_raw = request.form.get('extra_options')
     try:
@@ -145,7 +192,7 @@ def caption_image():
         file.stream.seek(0)
         file.save(tmp_path)
         try:
-            captioner = get_captioner(quantization)
+            captioner = get_captioner(quantization, caption_model)
         except ImportError:
             return jsonify({
                 "error": "missing_dependencies",
@@ -164,6 +211,19 @@ def caption_image():
 @app.route('/api/caption-status', methods=['GET'])
 def caption_status():
     return jsonify(_caption_state)
+
+
+@app.route('/api/caption-enable', methods=['POST'])
+def caption_enable():
+    # Kicks off the (potentially multi-GB, kobold-backend) download/load in the
+    # background as soon as the user opts in, rather than waiting for their first
+    # Compose click, and returns immediately — progress is surfaced via the
+    # existing /api/caption-status poll.
+    payload = request.get_json(silent=True) or {}
+    quantization = payload.get('quantization') or None
+    caption_model = payload.get('caption_model') or None
+    threading.Thread(target=_try_get_captioner, args=(quantization, caption_model), daemon=True).start()
+    return jsonify({"status": "started"})
 
 
 def _serialize_exif_value(value):

@@ -129,6 +129,8 @@ if "!DO_SKIP_SERVER!"=="1" (
     echo     Copying app files...
     copy "..\server.py" "!SERVER_DIR!\"
     copy "..\tagger.py" "!SERVER_DIR!\"
+    copy "..\joycaptioner.py" "!SERVER_DIR!\"
+    copy "..\joycaptioner_kobold.py" "!SERVER_DIR!\"
     xcopy /s /e /q /y "..\dist" "!SERVER_DIR!\dist\"
 
     echo     Server runtime ready.

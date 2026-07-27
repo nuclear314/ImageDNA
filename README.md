@@ -38,8 +38,27 @@ This feature is additive and optional:
   8-bit (~10GB VRAM), or full bf16 precision (~17GB VRAM, best quality).
 - Without `requirements-joycaption.txt` installed, the Step 2 card shows a clear "missing dependencies"
   message and the rest of the app (WD14 tagging, EXIF extraction, prompt generation) is unaffected.
-- **Not currently supported in the Windows standalone build** — `torch`/`transformers`/`bitsandbytes` are
-  not bundled into the PyInstaller executable. Use the Docker or dev-server setup for Step 2.
+
+### Step 2 on the Windows standalone build
+
+The Windows standalone build uses a different Step 2 backend than Docker/dev: instead of loading
+`torch`/`transformers`/`bitsandbytes` in-process (which would balloon the release folder by several GB
+for every user and has no AMD path), it downloads and runs [KoboldCpp](https://github.com/LostRuins/koboldcpp)
+— a small, self-contained inference server — as a background process, pointed at a GGUF conversion of
+the selected caption model plus its vision projector (`mmproj`) file.
+
+- **Opt-in, on demand:** nothing is downloaded until you turn on Natural Language Captioning in
+  Settings. `koboldcpp.exe` plus the GGUF/mmproj files (several GB) download once and are cached under
+  `%APPDATA%\ImageDNA\kobold` and `%APPDATA%\ImageDNA\models`.
+- **GPU required:** Step 2 needs an NVIDIA or AMD GPU (AMD via KoboldCpp's Vulkan backend) — there is no
+  CPU fallback. If no compatible GPU is detected, the toggle is disabled with an explanation.
+- **Caption model:** choose between JoyCaption Beta One (general-purpose, default) and NSFWVision v5
+  (NSFW-oriented) in Settings.
+- **Quantization:** GGUF quant levels — Q4_K_M (fastest, ~5-6GB VRAM, recommended), Q5_K_M (~6-7GB VRAM),
+  or Q6_K (~8-9GB VRAM, best quality) — distinct from Docker/dev's bitsandbytes 4-bit/8-bit/bf16 options.
+- **Attribution:** KoboldCpp's own code is licensed AGPL v3.0 (the underlying llama.cpp is MIT). ImageDNA
+  downloads and runs KoboldCpp's official, unmodified binary as a separate subprocess — it is not linked
+  against or vendored in this repository.
 
 ## Random Prompt Generator
 

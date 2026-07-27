@@ -42,6 +42,11 @@ if not os.path.exists(python_exe):
 # cleaning the app is a single folder delete.
 env = os.environ.copy()
 env['HF_HOME'] = os.path.join(user_data, 'models')
+# Only the packaged standalone build sets this — a bare `python server.py` dev run
+# (even on Windows) and Docker both leave it unset and keep the transformers/
+# bitsandbytes captioner path. See joycaptioner_kobold.py for the KoboldCpp backend.
+env['IMAGEDNA_CAPTION_BACKEND'] = 'kobold'
+env['IMAGEDNA_KOBOLD_HOME'] = os.path.join(user_data, 'kobold')
 
 # Start Flask in the embedded Python; capture output to log file
 log_file = open(log_path, 'w')
