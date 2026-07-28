@@ -7,10 +7,12 @@ transformers/bitsandbytes in-process (see joycaptioner.py, used by Docker/dev).
 Only active when IMAGEDNA_CAPTION_BACKEND=kobold (set by windows/main.py for the
 packaged standalone build) — see server.py's CAPTION_BACKEND dispatch.
 
-Several constants below are placeholders pending hands-on verification against a
-real KoboldCpp release and the target HF repos (exact filenames, CLI flags, and
-request/response shapes) — see WINDOWS_JOYCAPTION_GGUF.md and the implementation
-plan's "Open items requiring hands-on verification" section.
+The KoboldCpp release and both catalog models' GGUF/mmproj repos and filenames
+are pinned (see KOBOLDCPP_VERSION and KOBOLD_CAPTION_MODELS below). What's still
+unverified against a live instance: KoboldCpp's actual readiness endpoint and
+chat-completions request/response shape (see _wait_ready and caption_image) —
+see WINDOWS_JOYCAPTION_GGUF.md and the implementation plan's "Open items
+requiring hands-on verification" section.
 """
 import base64
 import ctypes
@@ -25,9 +27,12 @@ from joycaptioner import build_prompt  # pure string logic, safe to reuse withou
 
 KOBOLD_PORT = 5001
 
-# TODO: pin a specific KoboldCpp release, mirroring how windows/build.bat pins PYVER.
-KOBOLDCPP_VERSION = "TODO"
-KOBOLDCPP_EXE_URL = f"https://github.com/LostRuins/koboldcpp/releases/download/v{KOBOLDCPP_VERSION}/koboldcpp.exe"
+# Pinned KoboldCpp release, mirroring how windows/build.bat pins PYVER.
+# The nocuda build (Vulkan/CLBlast only, no bundled CUDA) matches this module's
+# always-`--usevulkan` launch flags below and is ~5x smaller than koboldcpp.exe,
+# which bundles CUDA this code never asks for via --usecublas.
+KOBOLDCPP_VERSION = "1.117.1"
+KOBOLDCPP_EXE_URL = f"https://github.com/LostRuins/koboldcpp/releases/download/v{KOBOLDCPP_VERSION}/koboldcpp-nocuda.exe"
 
 # Selectable GGUF caption models, mirroring App.tsx's TAGGER_MODELS pattern for WD14.
 # IDs are short stable slugs (not raw HF repo strings) so either side's repo pointer
@@ -36,32 +41,34 @@ KOBOLD_CAPTION_MODELS = {
     "joycaption-beta-one": {
         "name": "JoyCaption Beta One",
         "description": "General-purpose descriptive captioning (default)",
-        # TODO: confirm exact repo + per-quant filenames — candidates per the
-        # investigation doc: Mungert/llama-joycaption-beta-one-hf-llava-GGUF,
-        # mradermacher/llama-joycaption-beta-one-hf-llava-GGUF.
+        # mmproj_repo is published by concedo (KoboldCpp's own author); its other
+        # three files are full-model GGUFs, not mmproj — the mmproj file is the
+        # only one under this exact name. Verified against the live HF repo listings.
         "gguf_repo": "Mungert/llama-joycaption-beta-one-hf-llava-GGUF",
         "mmproj_repo": "concedo/llama-joycaption-beta-one-hf-llava-mmproj-gguf",
-        "mmproj_filename": "TODO",
+        "mmproj_filename": "llama-joycaption-beta-one-llava-mmproj-model-f16.gguf",
         "quant_filenames": {
-            "Q4_K_M": "TODO.gguf",
-            "Q5_K_M": "TODO.gguf",
-            "Q6_K": "TODO.gguf",
+            "Q4_K_M": "llama-joycaption-beta-one-hf-llava-q4_k_m.gguf",
+            "Q5_K_M": "llama-joycaption-beta-one-hf-llava-q5_k_m.gguf",
+            "Q6_K": "llama-joycaption-beta-one-hf-llava-q6_k_m.gguf",
         },
     },
     "nsfwvision-v5": {
         "name": "NSFWVision v5 (Qwen3.5 9B)",
         "description": "NSFW-oriented captioning",
-        # TODO: this is a Qwen3.5-9B-based vision model, a different architecture
-        # from JoyCaption's SigLIP tower — needs its own feasibility pass before
-        # shipping: confirm this repo actually has a GGUF + matching mmproj, under
-        # what filenames/quant naming (may not follow Q4_K_M/Q5_K_M/Q6_K at all),
-        # and that KoboldCpp's mtmd support covers this vision tower. See
-        # WINDOWS_JOYCAPTION_GGUF.md's follow-up plan, open item 9.
+        # Single repo hosts both the GGUFs and the mmproj (the "mmproj-" filename
+        # prefix is llama.cpp's own naming convention for a multimodal projector,
+        # good evidence KoboldCpp's mtmd path supports this vision tower). Verified
+        # against the live HF repo listing. This repo's own top quant is Q8_0 (no
+        # Q6_K) — the frontend shows each model's real quant set rather than a
+        # shared list, so this key is genuinely Q8_0, not a stand-in for Q6_K.
         "gguf_repo": "GitMylo/nsfwvision-v5_qwen3.5-9b-gguf",
-        "mmproj_repo": "TODO",
-        "mmproj_filename": "TODO",
+        "mmproj_repo": "GitMylo/nsfwvision-v5_qwen3.5-9b-gguf",
+        "mmproj_filename": "mmproj-nsfwvision_v5.gguf",
         "quant_filenames": {
-            "TODO": "TODO.gguf",
+            "Q4_K_M": "nsfwvision_v5-Q4_K_M.gguf",
+            "Q5_K_M": "nsfwvision_v5-Q5_K_M.gguf",
+            "Q8_0": "nsfwvision_v5-Q8_0.gguf",
         },
     },
 }

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Star, Type, Sliders, RotateCcw, AlertTriangle, Share2, Cpu, Sparkles } from 'lucide-react';
 import { CaptionQuantization, CaptionCapability, CaptionModelOption } from '../types';
+import { KOBOLD_QUANT_OPTIONS_BY_MODEL } from '../lib/captionOptions';
 
 interface TaggerModel {
   id: string;
@@ -13,13 +14,6 @@ const TRANSFORMERS_QUANT_OPTIONS: { id: CaptionQuantization; name: string; descr
   { id: '4bit', name: '4-bit (recommended)', description: '~6GB VRAM. Fastest, small quality trade-off.' },
   { id: '8bit', name: '8-bit', description: '~10GB VRAM. Better quality, slower.' },
   { id: 'bf16', name: 'Full precision (bf16)', description: '~17GB VRAM. Best quality, needs a big GPU.' },
-];
-
-// Windows standalone backend (KoboldCpp/GGUF) — different quant naming than bitsandbytes.
-const KOBOLD_QUANT_OPTIONS: { id: CaptionQuantization; name: string; description: string }[] = [
-  { id: 'Q4_K_M', name: 'Q4_K_M (recommended)', description: '~5-6GB VRAM. Fastest, small quality trade-off.' },
-  { id: 'Q5_K_M', name: 'Q5_K_M', description: '~6-7GB VRAM. Better quality, slightly slower.' },
-  { id: 'Q6_K', name: 'Q6_K', description: '~8-9GB VRAM. Best quality, needs more VRAM.' },
 ];
 
 interface SettingsModalProps {
@@ -81,7 +75,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const isKoboldBackend = captionCapability?.backend === 'kobold';
-  const captionQuantOptions = isKoboldBackend ? KOBOLD_QUANT_OPTIONS : TRANSFORMERS_QUANT_OPTIONS;
+  const captionQuantOptions = isKoboldBackend
+    ? (KOBOLD_QUANT_OPTIONS_BY_MODEL[captionModel as keyof typeof KOBOLD_QUANT_OPTIONS_BY_MODEL] ?? KOBOLD_QUANT_OPTIONS_BY_MODEL['joycaption-beta-one'])
+    : TRANSFORMERS_QUANT_OPTIONS;
   const noGpuDetected = isKoboldBackend && captionCapability?.gpu_vendor === 'none';
 
   if (!isOpen) return null;

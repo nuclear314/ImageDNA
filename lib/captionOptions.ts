@@ -1,4 +1,4 @@
-import { CaptionExtraOption, CaptionModeOption } from '../types';
+import { CaptionExtraOption, CaptionModeOption, CaptionModelId, CaptionQuantization } from '../types';
 
 // Mirrors JoyCaption Beta One's own prompt templates:
 // https://github.com/fpgaminer/joycaption#how-to-prompt-joycaption
@@ -21,3 +21,22 @@ export const CAPTION_EXTRA_OPTIONS: CaptionExtraOption[] = [
   { id: 'rating', label: 'SFW / suggestive / NSFW', instruction: 'Include whether the image is sfw, suggestive, or nsfw.' },
   { id: 'no_ambiguous', label: 'No ambiguous language', instruction: 'Do NOT use any ambiguous language.' },
 ];
+
+// Windows standalone backend (KoboldCpp/GGUF) only. Each caption model's own
+// quant set — these are NOT interchangeable across models (e.g. nsfwvision-v5
+// has no Q6_K quant, only up to Q8_0), so the selector must show only the
+// options that are real for whichever model is currently selected, never a
+// shared list. Must mirror joycaptioner_kobold.py's KOBOLD_CAPTION_MODELS
+// quant_filenames keys exactly.
+export const KOBOLD_QUANT_OPTIONS_BY_MODEL: Record<CaptionModelId, { id: CaptionQuantization; name: string; description: string }[]> = {
+  'joycaption-beta-one': [
+    { id: 'Q4_K_M', name: 'Q4_K_M (recommended)', description: '~5-6GB VRAM. Fastest, small quality trade-off.' },
+    { id: 'Q5_K_M', name: 'Q5_K_M', description: '~6-7GB VRAM. Better quality, slightly slower.' },
+    { id: 'Q6_K', name: 'Q6_K', description: '~8-9GB VRAM. Best quality, needs more VRAM.' },
+  ],
+  'nsfwvision-v5': [
+    { id: 'Q4_K_M', name: 'Q4_K_M (recommended)', description: '~5-6GB VRAM. Fastest, small quality trade-off.' },
+    { id: 'Q5_K_M', name: 'Q5_K_M', description: '~6-7GB VRAM. Better quality, slightly slower.' },
+    { id: 'Q8_0', name: 'Q8_0', description: '~9-10GB VRAM. Best quality, needs more VRAM.' },
+  ],
+};

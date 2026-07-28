@@ -40,7 +40,7 @@ export enum AppState {
 // Step 2: natural-language composition via JoyCaption, grounded in the WD14 tags from step 1.
 export type CaptionMode = 'descriptive' | 'straightforward' | 'sd_prompt' | 'midjourney' | 'social_media';
 export type CaptionTone = 'casual' | 'formal';
-export type CaptionQuantization = '4bit' | '8bit' | 'bf16' | 'Q4_K_M' | 'Q5_K_M' | 'Q6_K';
+export type CaptionQuantization = '4bit' | '8bit' | 'bf16' | 'Q4_K_M' | 'Q5_K_M' | 'Q6_K' | 'Q8_0';
 export type CaptionStatus = 'idle' | 'loading' | 'downloading' | 'error' | 'done';
 
 // Windows-only: which GGUF vision-caption model KoboldCpp should load. Ignored by

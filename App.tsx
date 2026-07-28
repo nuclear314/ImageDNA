@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { AppState, AppView, Tag, CaptionQuantization, CaptionCapability } from './types';
 import { filterAndFormatTags } from './lib/tagFiltering';
+import { KOBOLD_QUANT_OPTIONS_BY_MODEL } from './lib/captionOptions';
 import { useLocalStorage } from './lib/useLocalStorage';
 
 // UI Components
@@ -90,8 +91,13 @@ const App: React.FC = () => {
         // A stored quantization from before this backend was detected (or from
         // switching machines) may belong to the other backend's disjoint value
         // set — reset to that backend's own default rather than sending a
-        // meaningless value to /api/caption.
-        const validQuants = data.backend === 'kobold' ? ['Q4_K_M', 'Q5_K_M', 'Q6_K'] : ['4bit', '8bit', 'bf16'];
+        // meaningless value to /api/caption. This is just the coarse backend-level
+        // check; the effect below further narrows it to the selected caption
+        // model's own quant set (they're not all interchangeable, e.g. Q6_K only
+        // exists for joycaption-beta-one).
+        const validQuants = data.backend === 'kobold'
+          ? Object.values(KOBOLD_QUANT_OPTIONS_BY_MODEL).flatMap((opts) => opts.map((o) => o.id))
+          : ['4bit', '8bit', 'bf16'];
         if (!validQuants.includes(captionQuantization)) {
           setCaptionQuantization((data.backend === 'kobold' ? 'Q4_K_M' : '4bit') as CaptionQuantization);
         }
@@ -100,6 +106,20 @@ const App: React.FC = () => {
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Kobold caption models don't share a quant set (e.g. nsfwvision-v5 has no
+  // Q6_K, only up to Q8_0) — switching models can leave captionQuantization
+  // pointing at an option the newly-selected model doesn't offer, so reset to
+  // that model's first (recommended) option when that happens.
+  useEffect(() => {
+    if (captionCapability?.backend !== 'kobold') return;
+    const validOptions = KOBOLD_QUANT_OPTIONS_BY_MODEL[captionModel as keyof typeof KOBOLD_QUANT_OPTIONS_BY_MODEL]
+      ?? KOBOLD_QUANT_OPTIONS_BY_MODEL['joycaption-beta-one'];
+    if (!validOptions.some((opt) => opt.id === captionQuantization)) {
+      setCaptionQuantization(validOptions[0].id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [captionModel, captionCapability]);
 
   // Poll model load status while interrogating, so the processing screen can show a
   // real "downloading the model" message on a first-run cold start instead of a fake
