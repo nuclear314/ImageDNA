@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { AppState, AppView, Tag, CaptionQuantization, CaptionCapability } from './types';
 import { filterAndFormatTags } from './lib/tagFiltering';
-import { KOBOLD_QUANT_OPTIONS_BY_MODEL } from './lib/captionOptions';
+import { KOBOLD_QUANT_OPTIONS_BY_MODEL, KOBOLD_CAPTION_MODELS } from './lib/captionOptions';
 import { useLocalStorage } from './lib/useLocalStorage';
 
 // UI Components
@@ -34,14 +34,6 @@ const TAGGER_MODELS = [
   { id: 'SmilingWolf/wd-eva02-large-tagger-v3', name: 'EVA02 Large v3', description: 'Best accuracy (default)' },
   { id: 'SmilingWolf/wd-v1-4-moat-tagger-v2', name: 'MOAT v2', description: 'Good balance of speed and accuracy' },
   { id: 'SmilingWolf/wd-swinv2-tagger-v3', name: 'SwinV2 v3', description: 'Fast and efficient' },
-] as const;
-
-// Windows-only (KoboldCpp/GGUF backend) — ignored by the transformers backend
-// (Docker/dev), which only ever has one caption model. IDs must match the keys
-// of joycaptioner_kobold.py's KOBOLD_CAPTION_MODELS catalog.
-const KOBOLD_CAPTION_MODELS = [
-  { id: 'joycaption-beta-one', name: 'JoyCaption Beta One', description: 'General-purpose descriptive captioning (default)' },
-  { id: 'nsfwvision-v5', name: 'NSFWVision v5 (Qwen3.5 9B)', description: 'NSFW-oriented captioning' },
 ] as const;
 
 const App: React.FC = () => {

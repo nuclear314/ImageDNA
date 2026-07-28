@@ -1,4 +1,4 @@
-import { CaptionExtraOption, CaptionModeOption, CaptionModelId, CaptionQuantization } from '../types';
+import { CaptionExtraOption, CaptionModeOption, CaptionModelId, CaptionModelOption, CaptionQuantization } from '../types';
 
 // Mirrors JoyCaption Beta One's own prompt templates:
 // https://github.com/fpgaminer/joycaption#how-to-prompt-joycaption
@@ -20,6 +20,14 @@ export const CAPTION_EXTRA_OPTIONS: CaptionExtraOption[] = [
   { id: 'watermark', label: 'Watermark check', instruction: 'Include information about whether there is a watermark or not.' },
   { id: 'rating', label: 'SFW / suggestive / NSFW', instruction: 'Include whether the image is sfw, suggestive, or nsfw.' },
   { id: 'no_ambiguous', label: 'No ambiguous language', instruction: 'Do NOT use any ambiguous language.' },
+];
+
+// Windows-only (KoboldCpp/GGUF backend) — ignored by the transformers backend
+// (Docker/dev), which only ever has one caption model. IDs must match the keys
+// of joycaptioner_kobold.py's KOBOLD_CAPTION_MODELS catalog.
+export const KOBOLD_CAPTION_MODELS: CaptionModelOption[] = [
+  { id: 'joycaption-beta-one', name: 'JoyCaption Beta One', description: 'General-purpose descriptive captioning (default)' },
+  { id: 'nsfwvision-v5', name: 'NSFWVision v5 (Qwen3.5 9B)', description: 'NSFW-oriented captioning' },
 ];
 
 // Windows standalone backend (KoboldCpp/GGUF) only. Each caption model's own
