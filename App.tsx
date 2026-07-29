@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { AppState, AppView, Tag, CaptionQuantization, CaptionCapability } from './types';
 import { filterAndFormatTags } from './lib/tagFiltering';
+import { KOBOLD_QUANT_OPTIONS_BY_MODEL, KOBOLD_CAPTION_MODELS } from './lib/captionOptions';
 import { useLocalStorage } from './lib/useLocalStorage';
 
 // UI Components
@@ -27,7 +28,7 @@ import CaptionPanel from './components/CaptionPanel';
 
 const DEFAULT_MASTERPIECE_TAGS = 'masterpiece, best quality, highres, ultra-detailed';
 const BREAST_SIZES = ['flat', 'small', 'medium', 'large', 'huge', 'gigantic'];
-const APP_VERSION = 'v2.2';
+const APP_VERSION = 'v2.4';
 
 const TAGGER_MODELS = [
   { id: 'SmilingWolf/wd-eva02-large-tagger-v3', name: 'EVA02 Large v3', description: 'Best accuracy (default)' },
@@ -53,6 +54,7 @@ const App: React.FC = () => {
   const [selectedModel, setSelectedModel] = useLocalStorage<string>('imagedna:selectedModel', TAGGER_MODELS[0].id);
   const [enableJoyCaption, setEnableJoyCaption] = useLocalStorage('imagedna:enableJoyCaption', false);
   const [captionQuantization, setCaptionQuantization] = useLocalStorage<CaptionQuantization>('imagedna:captionQuantization', '4bit');
+  const [captionModel, setCaptionModel] = useLocalStorage<string>('imagedna:captionModel', KOBOLD_CAPTION_MODELS[0].id);
   const [copied, setCopied] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -75,10 +77,41 @@ const App: React.FC = () => {
     let cancelled = false;
     fetch('/api/caption-capability')
       .then((res) => res.json())
-      .then((data) => { if (!cancelled) setCaptionCapability(data); })
+      .then((data: CaptionCapability) => {
+        if (cancelled) return;
+        setCaptionCapability(data);
+        // A stored quantization from before this backend was detected (or from
+        // switching machines) may belong to the other backend's disjoint value
+        // set — reset to that backend's own default rather than sending a
+        // meaningless value to /api/caption. This is just the coarse backend-level
+        // check; the effect below further narrows it to the selected caption
+        // model's own quant set (they're not all interchangeable, e.g. Q6_K only
+        // exists for joycaption-beta-one).
+        const validQuants = data.backend === 'kobold'
+          ? Object.values(KOBOLD_QUANT_OPTIONS_BY_MODEL).flatMap((opts) => opts.map((o) => o.id))
+          : ['4bit', '8bit', 'bf16'];
+        if (!validQuants.includes(captionQuantization)) {
+          setCaptionQuantization((data.backend === 'kobold' ? 'Q4_K_M' : '4bit') as CaptionQuantization);
+        }
+      })
       .catch(() => { /* leave as null — badge just stays hidden */ });
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Kobold caption models don't share a quant set (e.g. nsfwvision-v5 has no
+  // Q6_K, only up to Q8_0) — switching models can leave captionQuantization
+  // pointing at an option the newly-selected model doesn't offer, so reset to
+  // that model's first (recommended) option when that happens.
+  useEffect(() => {
+    if (captionCapability?.backend !== 'kobold') return;
+    const validOptions = KOBOLD_QUANT_OPTIONS_BY_MODEL[captionModel as keyof typeof KOBOLD_QUANT_OPTIONS_BY_MODEL]
+      ?? KOBOLD_QUANT_OPTIONS_BY_MODEL['joycaption-beta-one'];
+    if (!validOptions.some((opt) => opt.id === captionQuantization)) {
+      setCaptionQuantization(validOptions[0].id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [captionModel, captionCapability]);
 
   // Poll model load status while interrogating, so the processing screen can show a
   // real "downloading the model" message on a first-run cold start instead of a fake
@@ -227,9 +260,26 @@ const App: React.FC = () => {
         setSelectedModel={setSelectedModel}
         taggerModels={TAGGER_MODELS}
         enableJoyCaption={enableJoyCaption}
-        setEnableJoyCaption={setEnableJoyCaption}
+        setEnableJoyCaption={(val) => {
+          setEnableJoyCaption(val);
+          if (val) {
+            // Kick off the (potentially multi-GB, kobold-backend) download/load in
+            // the background as soon as the user opts in, rather than waiting for
+            // their first Compose click — progress surfaces via CaptionPanel's
+            // existing /api/caption-status poll.
+            fetch('/api/caption-enable', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ quantization: captionQuantization, caption_model: captionModel }),
+            }).catch(() => { /* best-effort — errors surface via /api/caption-status */ });
+          }
+        }}
         captionQuantization={captionQuantization}
         setCaptionQuantization={setCaptionQuantization}
+        captionCapability={captionCapability}
+        captionModel={captionModel}
+        setCaptionModel={setCaptionModel}
+        captionModels={KOBOLD_CAPTION_MODELS}
       />
       
       {currentView === 'promptGenerator' && (
@@ -409,6 +459,7 @@ const App: React.FC = () => {
                     imageFile={currentFile}
                     knownTags={result.tags.map(t => t.label)}
                     quantization={captionQuantization}
+                    captionModel={captionCapability?.backend === 'kobold' ? captionModel : null}
                   />
                 )}
               </div>

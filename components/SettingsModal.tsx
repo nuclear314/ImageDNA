@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Star, Type, Sliders, RotateCcw, AlertTriangle, Share2, Cpu, Sparkles } from 'lucide-react';
-import { CaptionQuantization } from '../types';
+import { CaptionQuantization, CaptionCapability, CaptionModelOption } from '../types';
+import { KOBOLD_QUANT_OPTIONS_BY_MODEL } from '../lib/captionOptions';
 
 interface TaggerModel {
   id: string;
@@ -8,7 +9,8 @@ interface TaggerModel {
   description: string;
 }
 
-const CAPTION_QUANT_OPTIONS: { id: CaptionQuantization; name: string; description: string }[] = [
+// Docker/dev backend (transformers/bitsandbytes) — unchanged.
+const TRANSFORMERS_QUANT_OPTIONS: { id: CaptionQuantization; name: string; description: string }[] = [
   { id: '4bit', name: '4-bit (recommended)', description: '~6GB VRAM. Fastest, small quality trade-off.' },
   { id: '8bit', name: '8-bit', description: '~10GB VRAM. Better quality, slower.' },
   { id: 'bf16', name: 'Full precision (bf16)', description: '~17GB VRAM. Best quality, needs a big GPU.' },
@@ -37,6 +39,10 @@ interface SettingsModalProps {
   setEnableJoyCaption: (val: boolean) => void;
   captionQuantization: CaptionQuantization;
   setCaptionQuantization: (val: CaptionQuantization) => void;
+  captionCapability: CaptionCapability | null;
+  captionModel: string;
+  setCaptionModel: (val: string) => void;
+  captionModels: readonly CaptionModelOption[];
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -62,8 +68,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   setEnableJoyCaption,
   captionQuantization,
   setCaptionQuantization,
+  captionCapability,
+  captionModel,
+  setCaptionModel,
+  captionModels,
 }) => {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const isKoboldBackend = captionCapability?.backend === 'kobold';
+  const captionQuantOptions = isKoboldBackend
+    ? (KOBOLD_QUANT_OPTIONS_BY_MODEL[captionModel as keyof typeof KOBOLD_QUANT_OPTIONS_BY_MODEL] ?? KOBOLD_QUANT_OPTIONS_BY_MODEL['joycaption-beta-one'])
+    : TRANSFORMERS_QUANT_OPTIONS;
+  const noGpuDetected = isKoboldBackend && captionCapability?.gpu_vendor === 'none';
 
   if (!isOpen) return null;
 
@@ -147,25 +162,64 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div>
                   <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">Natural Language Captioning</p>
                   <p className="text-[10px] text-zinc-400 dark:text-zinc-500">
-                    Show the Step 2 card. Off by default — most setups don't have JoyCaption's dependencies
-                    installed, and it's a heavy, optional add-on even when they are.
+                    {noGpuDetected
+                      ? "No compatible GPU detected — Step 2 requires an NVIDIA or AMD GPU on Windows."
+                      : "Show the Step 2 card. Off by default — most setups don't have JoyCaption's dependencies installed, and it's a heavy, optional add-on even when they are."}
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setEnableJoyCaption(!enableJoyCaption)}
-                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${enableJoyCaption ? 'bg-fuchsia-600' : 'bg-zinc-200 dark:bg-zinc-700'}`}
+                disabled={noGpuDetected}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${noGpuDetected ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${enableJoyCaption ? 'bg-fuchsia-600' : 'bg-zinc-200 dark:bg-zinc-700'}`}
               >
                 <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${enableJoyCaption ? 'translate-x-5' : 'translate-x-0'}`} />
               </button>
             </div>
-            {enableJoyCaption && (
-              <div className="ml-11 space-y-2">
-                <p className="text-[10px] text-zinc-400 dark:text-zinc-500 -mt-1 mb-1">
-                  Model precision for Step 2. Downloaded on first use — requires an NVIDIA GPU and the
-                  packages in requirements-joycaption.txt.
-                </p>
-                {CAPTION_QUANT_OPTIONS.map((opt) => (
+            {enableJoyCaption && !noGpuDetected && (
+              <div className="ml-11 space-y-4">
+                {isKoboldBackend && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] text-zinc-400 dark:text-zinc-500 -mt-1 mb-1">
+                      Caption model for Step 2. Downloaded on first use.
+                    </p>
+                    {captionModels.map((model) => (
+                      <label
+                        key={model.id}
+                        className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                          captionModel === model.id
+                            ? 'border-fuchsia-500 bg-fuchsia-500/5'
+                            : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="captionModel"
+                          value={model.id}
+                          checked={captionModel === model.id}
+                          onChange={(e) => setCaptionModel(e.target.value)}
+                          className="sr-only"
+                        />
+                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                          captionModel === model.id ? 'border-fuchsia-500' : 'border-zinc-300 dark:border-zinc-600'
+                        }`}>
+                          {captionModel === model.id && <div className="w-2 h-2 rounded-full bg-fuchsia-500" />}
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">{model.name}</p>
+                          <p className="text-[10px] text-zinc-400 dark:text-zinc-500">{model.description}</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <p className="text-[10px] text-zinc-400 dark:text-zinc-500 -mt-1 mb-1">
+                    {isKoboldBackend
+                      ? "Model precision for Step 2. Downloaded on first use — requires an NVIDIA or AMD GPU (Vulkan)."
+                      : "Model precision for Step 2. Downloaded on first use — requires an NVIDIA GPU and the packages in requirements-joycaption.txt."}
+                  </p>
+                  {captionQuantOptions.map((opt) => (
                   <label
                     key={opt.id}
                     className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
@@ -193,6 +247,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   </label>
                 ))}
+                </div>
               </div>
             )}
           </div>

@@ -13,7 +13,9 @@ ImageDNA is a full-stack web application for extracting semantic tags from image
 bitsandbytes; `--build-arg WITH_JOYCAPTION=true` installs those from PyTorch's CUDA (`cu126`) wheel index
 instead of plain PyPI (which resolves to a CPU-only wheel), for use with `docker run --gpus all`. A separate
 `windows/` standalone build (PyInstaller + embedded Python + pywebview) also exists — see README's "How to
-build the Windows standalone app" section.
+build the Windows standalone app" section. `windows/main.py` sets `IMAGEDNA_CAPTION_BACKEND=kobold` (see
+Model Loading below) before spawning `server.py`, so Step 2 uses the KoboldCpp/GGUF backend there instead
+of transformers/bitsandbytes.
 
 ## Architecture
 
@@ -31,18 +33,37 @@ The app has four main views toggled from the header:
 - `GET /api/tags` — returns full tag vocabulary for the active model
 - `POST /api/exif` — accepts image file, returns structured EXIF metadata and PNG text chunks (including Stable Diffusion `parameters`)
 - `GET /api/status` — returns `{status, model}` reflecting tagger load state (`idle`/`downloading`/`ready`/`error`); polled by the Windows launcher and the frontend's processing view, never triggers loading itself
-- `POST /api/caption` — Step 2 natural-language captioning. Accepts image file + mode/tone/quantization/extra_options/known_tags, returns `{caption, prompt_used}`; 503s with `{"error": "missing_dependencies"}` if `requirements-joycaption.txt` isn't installed
-- `GET /api/caption-status` — returns `_caption_state` (`{status, model, error}`), polled by the frontend while a caption is composing
-- `GET /api/caption-capability` — returns `{available, cuda}` (dependencies installed / GPU detected), a cheap cached check (just `import torch` + `torch.cuda.is_available()`, no model weights touched); backs the header's fast/slow caption speed badge, fetched once on app load
+- `POST /api/caption` — Step 2 natural-language captioning. Accepts image file + mode/tone/quantization/extra_options/known_tags, and (Windows/kobold backend only) `caption_model`; returns `{caption, prompt_used}`; 503s with `{"error": "missing_dependencies"}` if `requirements-joycaption.txt` isn't installed (transformers backend) or `joycaptioner_kobold.py` isn't present (kobold backend)
+- `GET /api/caption-status` — returns `_caption_state` (`{status, model, error, stage}`); `stage` (`koboldcpp`/`gguf`/`mmproj`/`starting`/`None`) is only populated by the kobold backend's artifact-download progress. Polled by the frontend while a caption is composing
+- `POST /api/caption-enable` — kobold backend only; accepts JSON `{quantization, caption_model}`, kicks off the (potentially multi-GB) KoboldCpp+GGUF+mmproj download/load in a background thread and returns immediately, so opting in from Settings doesn't wait for the first Compose click. No-op on the transformers backend (still safe to call — reuses `get_captioner()`)
+- `GET /api/caption-capability` — returns `{backend, available, cuda, gpu_vendor}` (`backend` is `"transformers"` or `"kobold"`; dependencies installed / GPU detected), a cheap cached check; backs the header's fast/slow caption speed badge, fetched once on app load
 
 **Model loading:** the default tagger model starts loading in a background thread as soon as `server.py`
 boots, rather than lazily on first `/api/tag`/`/api/tags` request — this pre-warms the Windows launcher's
 startup wait and makes Docker readiness reflect real usability sooner. The JoyCaption captioner is the
-opposite: it's heavy/optional (`torch`/`transformers`/`bitsandbytes`) and is **never** eager-loaded —
-`get_captioner()` in `server.py` lazily imports `joycaptioner.py` only on the first `/api/caption` call,
-so a CPU-only / lightweight deployment never pulls those dependencies in. Switching the quantization
-setting mid-session calls `JoyCaptioner.unload()` on the previously cached instance (freeing its CUDA
-memory) before loading the replacement — only one captioner instance is ever resident at a time.
+opposite: it's heavy/optional and is **never** eager-loaded — `get_captioner()` in `server.py` lazily
+imports the active backend's module only on first use, so a CPU-only / lightweight deployment never
+pulls those dependencies in. Switching quantization (or, on the kobold backend, the caption model) mid-
+session calls `.unload()` on the previously cached instance before loading the replacement — only one
+captioner instance is ever resident at a time.
+
+**Two caption backends, dispatched by `server.py`'s `CAPTION_BACKEND` env var**
+(`IMAGEDNA_CAPTION_BACKEND`, default `"transformers"`):
+- **`transformers` (Docker/dev-server, including a bare `python server.py` run on Windows):** in-process
+  `torch`/`transformers`/`bitsandbytes` via `joycaptioner.py`'s `JoyCaptioner`, keyed by quantization
+  (`4bit`/`8bit`/`bf16`) alone — unchanged from before the Windows port.
+- **`kobold` (Windows standalone build only, set by `windows/main.py`):** `joycaptioner_kobold.py`'s
+  `JoyCaptionerKobold` spawns a local `koboldcpp.exe` subprocess pointed at a downloaded GGUF model +
+  mmproj file, and talks to it over its OpenAI-compatible `/v1/chat/completions` HTTP endpoint — no
+  torch/transformers/bitsandbytes involved. The captioner cache key is **(model_id, quantization)**
+  here, since users can pick between GGUF models (`KOBOLD_CAPTION_MODELS` catalog: `joycaption-beta-one`
+  default, `nsfwvision-v5`), not just quantization. GPU is required (NVIDIA or AMD via `--usevulkan`) —
+  no CPU fallback; `detect_capability()` shells out to `Get-CimInstance Win32_VideoController` rather
+  than importing torch. `koboldcpp.exe` + GGUF/mmproj download opt-in on first enabling Step 2
+  (`POST /api/caption-enable`), cached under `%APPDATA%\ImageDNA\kobold` and the same `HF_HOME` the WD14
+  tagger uses. Several constants in `joycaptioner_kobold.py` (exact KoboldCpp release/URL, exact
+  GGUF/mmproj filenames per model) are placeholder `TODO`s pending hands-on verification against a real
+  Windows/GPU machine — see `WINDOWS_JOYCAPTION_GGUF.md` for the full rationale.
 
 **State persistence:** React `useState` + `localStorage` (hook lives in `lib/useLocalStorage.ts`), all keys prefixed `imagedna:`
 
@@ -53,7 +74,8 @@ memory) before loading the replacement — only one captioner instance is ever r
 | `App.tsx` | Root component — global state, image upload, tag filtering logic |
 | `server.py` | Flask server and API endpoint handlers |
 | `tagger.py` | `WD14Tagger` class — HF model download, image preprocessing, ONNX inference |
-| `joycaptioner.py` | `JoyCaptioner` class — Step 2 natural-language captioning via JoyCaption Beta One (lazy-imported, optional GPU dependency) |
+| `joycaptioner.py` | `JoyCaptioner` class — Step 2 natural-language captioning via JoyCaption Beta One using in-process transformers/bitsandbytes (Docker/dev-server backend; lazy-imported, optional GPU dependency). `build_prompt()` is shared with the kobold backend |
+| `joycaptioner_kobold.py` | `JoyCaptionerKobold` class — Windows-only Step 2 backend: spawns/manages a local KoboldCpp subprocess against a selectable GGUF model + mmproj, talks to it over its OpenAI-compatible HTTP API. Also home to `KOBOLD_CAPTION_MODELS`, `detect_capability()`, and artifact download/caching |
 | `components/BulkTagger.tsx` | Bulk view — multi-file queue, sequential `/api/tag` processing, zip export |
 | `components/PromptGenerator.tsx` | Tag vocabulary loading, priority-group prompt generation |
 | `components/ExifExtractor.tsx` | EXIF/PNG metadata extraction view — parses and splits SD generation parameters |
@@ -62,7 +84,7 @@ memory) before loading the replacement — only one captioner instance is ever r
 | `lib/exportZip.ts` | Builds a downloadable zip of image + matching `.txt` caption pairs (JSZip) |
 | `lib/useLocalStorage.ts` | Shared `useLocalStorage` hook (extracted from `App.tsx`) used by `App.tsx` and `CaptionPanel.tsx` |
 | `lib/captionOptions.ts` | Frontend catalog of JoyCaption modes and curated "extra option" toggles |
-| `components/SettingsModal.tsx` | Model selection, feature toggles (masterpiece, underscores, breast consolidation, DA mode), JoyCaption quantization |
+| `components/SettingsModal.tsx` | Model selection, feature toggles (masterpiece, underscores, breast consolidation, DA mode), JoyCaption quantization (backend-conditional: bitsandbytes vs. GGUF option lists) and, on the kobold backend, caption model selection |
 | `components/SettingsPanel.tsx` | Confidence threshold slider and exclude tags textarea |
 | `components/InfoBauble.tsx` | Reusable hoverable tooltip `(i)` component |
 | `components/TagGrid.tsx` | Renders tags as color-coded chips with confidence % |
@@ -93,14 +115,17 @@ Image upload → `POST /api/exif` → Pillow reads `img.getexif()` (JPEG EXIF) +
 RGBA → RGB (white background) → pad to square → resize 448×448 → BGR float32 array
 
 **Natural-language captioning (Step 2):**
-Extracted tags (Step 1) → `POST /api/caption` → JoyCaption Beta One (grounded in tags, via
-`joycaptioner.py`) → textarea + copy button in `CaptionPanel`. Optional and additive — requires
-`pip install -r requirements-joycaption.txt` and an NVIDIA GPU; not bundled into the Windows standalone
-build (see README's "Step 2: Natural Language Captioning" section). Installing plain `torch` from PyPI
-resolves to a CPU-only wheel (PyTorch's CUDA builds are too large for PyPI and only live on PyTorch's own
-`cu126` index) — the `/api/caption-capability` badge reads "Slow Caption" whenever `torch.cuda.is_available()`
-is `False`, which includes this case even on a machine with a working NVIDIA GPU. In Docker this is handled
-by the `WITH_JOYCAPTION` build arg (see Tech Stack); for bare venvs, see README's "GPU build of torch" note.
+Extracted tags (Step 1) → `POST /api/caption` → grounded caption via whichever backend `CAPTION_BACKEND`
+selects → textarea + copy button in `CaptionPanel`. Optional and additive.
+- **Docker/dev-server (transformers backend):** requires `pip install -r requirements-joycaption.txt`
+  and an NVIDIA GPU. Installing plain `torch` from PyPI resolves to a CPU-only wheel (PyTorch's CUDA
+  builds are too large for PyPI and only live on PyTorch's own `cu126` index) — the
+  `/api/caption-capability` badge reads "Slow Caption" whenever `torch.cuda.is_available()` is `False`,
+  which includes this case even on a machine with a working NVIDIA GPU. In Docker this is handled by the
+  `WITH_JOYCAPTION` build arg (see Tech Stack); for bare venvs, see README's "GPU build of torch" note.
+- **Windows standalone build (kobold backend):** no Python ML dependencies at all — requires an NVIDIA
+  or AMD GPU (via KoboldCpp's Vulkan backend) instead, downloaded opt-in on first enabling Step 2. See
+  README's "Step 2 on the Windows standalone build" section and the Model Loading section above.
 
 ## Available Models
 

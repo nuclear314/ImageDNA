@@ -1,16 +1,24 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Sparkles, Copy, Check, ChevronDown, Loader2, AlertTriangle } from 'lucide-react';
 import { useLocalStorage } from '../lib/useLocalStorage';
-import { CAPTION_MODES, CAPTION_EXTRA_OPTIONS } from '../lib/captionOptions';
+import { CAPTION_MODES, CAPTION_EXTRA_OPTIONS, KOBOLD_CAPTION_MODELS } from '../lib/captionOptions';
 import { CaptionMode, CaptionTone, CaptionQuantization, CaptionStatus } from '../types';
+
+const STAGE_LABELS: Record<string, string> = {
+  koboldcpp: 'Downloading KoboldCpp engine…',
+  gguf: 'Downloading GGUF model…',
+  mmproj: 'Downloading vision projector…',
+  starting: 'Starting captioning engine…',
+};
 
 interface CaptionPanelProps {
   imageFile: File | null;
   knownTags: string[];
   quantization: CaptionQuantization;
+  captionModel?: string | null;
 }
 
-const CaptionPanel: React.FC<CaptionPanelProps> = ({ imageFile, knownTags, quantization }) => {
+const CaptionPanel: React.FC<CaptionPanelProps> = ({ imageFile, knownTags, quantization, captionModel }) => {
   const [mode, setMode] = useLocalStorage<CaptionMode>('imagedna:captionMode', 'descriptive');
   const [tone, setTone] = useLocalStorage<CaptionTone>('imagedna:captionTone', 'casual');
   const [useKnownTags, setUseKnownTags] = useLocalStorage<boolean>('imagedna:captionUseKnownTags', true);
@@ -18,6 +26,7 @@ const CaptionPanel: React.FC<CaptionPanelProps> = ({ imageFile, knownTags, quant
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const [status, setStatus] = useState<CaptionStatus>('idle');
+  const [stage, setStage] = useState<string | null>(null);
   const [caption, setCaption] = useState('');
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
@@ -26,6 +35,7 @@ const CaptionPanel: React.FC<CaptionPanelProps> = ({ imageFile, knownTags, quant
   // A freshly uploaded image invalidates any previously composed caption.
   useEffect(() => {
     setStatus('idle');
+    setStage(null);
     setCaption('');
     setError('');
   }, [imageFile]);
@@ -43,16 +53,21 @@ const CaptionPanel: React.FC<CaptionPanelProps> = ({ imageFile, knownTags, quant
   const handleCompose = async () => {
     if (!imageFile) return;
     setStatus('loading');
+    setStage(null);
     setError('');
 
     // Poll load state so a cold-start model download shows real progress,
-    // same pattern App.tsx uses for the WD14 tagger's /api/status.
+    // same pattern App.tsx uses for the WD14 tagger's /api/status. `stage`
+    // only comes from the Windows KoboldCpp backend (koboldcpp/gguf/mmproj/
+    // starting) — undefined on the transformers backend, which just reports
+    // status without sub-stages.
     pollRef.current = window.setInterval(async () => {
       try {
         const res = await fetch('/api/caption-status');
         if (!res.ok) return;
         const data = await res.json();
         if (data.status === 'downloading') setStatus('downloading');
+        setStage(data.stage ?? null);
       } catch {
         // Transient poll failure — ignore and try again on the next tick.
       }
@@ -64,6 +79,9 @@ const CaptionPanel: React.FC<CaptionPanelProps> = ({ imageFile, knownTags, quant
       formData.append('mode', mode);
       formData.append('tone', tone);
       formData.append('quantization', quantization);
+      if (captionModel) {
+        formData.append('caption_model', captionModel);
+      }
 
       const instructions = selectedExtras
         .map((id) => CAPTION_EXTRA_OPTIONS.find((o) => o.id === id)?.instruction)
@@ -103,12 +121,23 @@ const CaptionPanel: React.FC<CaptionPanelProps> = ({ imageFile, knownTags, quant
 
   const isBusy = status === 'loading' || status === 'downloading';
 
+  // On the transformers backend (Docker/dev) there's only ever one model, so
+  // captionModel is always null there (see App.tsx) — the kobold backend passes
+  // the actual selected id, which may differ from what's currently loaded on the
+  // server while a switch is still in flight.
+  const currentModelName = captionModel
+    ? KOBOLD_CAPTION_MODELS.find((m) => m.id === captionModel)?.name ?? captionModel
+    : 'JoyCaption (Beta One)';
+
   return (
     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-sm dark:shadow-2xl dark:shadow-fuchsia-500/5">
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-lg font-semibold flex items-center gap-2">
           <Sparkles className="w-5 h-5 text-fuchsia-500 dark:text-fuchsia-400" />
           Step 2: Natural Language Prompt
+          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full border border-fuchsia-500/30 bg-fuchsia-500/5 text-fuchsia-600 dark:text-fuchsia-400">
+            {currentModelName}
+          </span>
         </h2>
         {status === 'done' && (
           <button
@@ -126,7 +155,7 @@ const CaptionPanel: React.FC<CaptionPanelProps> = ({ imageFile, knownTags, quant
       </div>
 
       <p className="text-xs text-zinc-400 dark:text-zinc-500 mb-4">
-        Runs JoyCaption (Beta One) over the image, grounded in the tags extracted above, to compose
+        Runs {currentModelName} over the image, grounded in the tags extracted above, to compose
         a natural-language caption instead of a comma-separated tag list.
       </p>
 
@@ -216,7 +245,7 @@ const CaptionPanel: React.FC<CaptionPanelProps> = ({ imageFile, knownTags, quant
         >
           {isBusy && <Loader2 className="w-4 h-4 animate-spin" />}
           {status === 'downloading'
-            ? 'Downloading JoyCaption (first run, several GB)…'
+            ? (stage && STAGE_LABELS[stage]) || 'Downloading JoyCaption (first run, several GB)…'
             : status === 'loading'
               ? 'Composing…'
               : 'Compose Natural Language Prompt'}
