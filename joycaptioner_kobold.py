@@ -1,16 +1,22 @@
 """
-Windows-only Step 2 backend: runs a local KoboldCpp subprocess pointed at a GGUF
+Windows/Linux Step 2 backend: runs a local KoboldCpp subprocess pointed at a GGUF
 vision-caption model + its mmproj (multimodal projector) file, and talks to it over
 its OpenAI-compatible /v1/chat/completions HTTP endpoint, instead of loading
 transformers/bitsandbytes in-process (see joycaptioner.py, used by Docker/dev).
 
-Only active when IMAGEDNA_CAPTION_BACKEND=kobold (set by windows/main.py for the
-packaged standalone build) — see server.py's CAPTION_BACKEND dispatch.
+Only active when IMAGEDNA_CAPTION_BACKEND=kobold (set by windows/main.py and
+linux/main.py for their respective packaged standalone builds) — see server.py's
+CAPTION_BACKEND dispatch.
 
 The KoboldCpp release and both catalog models' GGUF/mmproj repos and filenames
-are pinned (see KOBOLDCPP_VERSION and KOBOLD_CAPTION_MODELS below). What's still
-unverified against a live instance: KoboldCpp's actual readiness endpoint and
-chat-completions request/response shape (see _wait_ready and caption_image) —
+are pinned (see KOBOLDCPP_VERSION and KOBOLD_CAPTION_MODELS below). The HTTP
+integration itself (KoboldCpp's readiness endpoint and chat-completions request/
+response shape — see _wait_ready and caption_image) is confirmed working against
+a live Windows/GPU instance (produces real NLP captions end-to-end). What's
+*not* yet verified on Linux specifically is the OS-specific plumbing added by
+this port: GPU vendor detection (detect_capability), the koboldcpp-linux-x64-nocuda
+binary actually downloading/starting/becoming ready, and the PR_SET_PDEATHSIG
+process-lifecycle replacement for Windows' Job Object (see _preexec_pdeathsig) —
 see WINDOWS_JOYCAPTION_GGUF.md and the implementation plan's "Open items
 requiring hands-on verification" section.
 """
@@ -18,6 +24,8 @@ import base64
 import ctypes
 import json
 import os
+import platform
+import signal
 import subprocess
 import time
 import urllib.error
@@ -30,9 +38,14 @@ KOBOLD_PORT = 5001
 # Pinned KoboldCpp release, mirroring how windows/build.bat pins PYVER.
 # The nocuda build (Vulkan/CLBlast only, no bundled CUDA) matches this module's
 # always-`--usevulkan` launch flags below and is ~5x smaller than koboldcpp.exe,
-# which bundles CUDA this code never asks for via --usecublas.
+# which bundles CUDA this code never asks for via --usecublas. Same version tag
+# publishes both the Windows and Linux assets, so one pin covers both platforms.
 KOBOLDCPP_VERSION = "1.117.1"
-KOBOLDCPP_EXE_URL = f"https://github.com/LostRuins/koboldcpp/releases/download/v{KOBOLDCPP_VERSION}/koboldcpp-nocuda.exe"
+KOBOLDCPP_EXE_URL_WINDOWS = f"https://github.com/LostRuins/koboldcpp/releases/download/v{KOBOLDCPP_VERSION}/koboldcpp-nocuda.exe"
+# VERIFY at implementation time — asset naming has shifted across KoboldCpp
+# releases historically; confirmed present for this exact pinned version as of
+# this port, but re-check before bumping KOBOLDCPP_VERSION.
+KOBOLDCPP_EXE_URL_LINUX = f"https://github.com/LostRuins/koboldcpp/releases/download/v{KOBOLDCPP_VERSION}/koboldcpp-linux-x64-nocuda"
 
 # Selectable GGUF caption models, mirroring App.tsx's TAGGER_MODELS pattern for WD14.
 # IDs are short stable slugs (not raw HF repo strings) so either side's repo pointer
@@ -83,21 +96,48 @@ def _kobold_home():
 def detect_capability():
     """GPU vendor sniff without importing torch (torch is deliberately never
     installed on this path — that's the whole size/AMD-support rationale for
-    choosing KoboldCpp). Shells out to PowerShell's CIM cmdlet, same tool
-    windows/build.bat already relies on for its own downloads.
+    choosing KoboldCpp). On Windows, shells out to PowerShell's CIM cmdlet
+    (same tool windows/build.bat already relies on for its own downloads). On
+    Linux, shells out to `lspci` — the closest semantic match (enumerates
+    attached display hardware independent of driver state, available
+    out-of-the-box via pciutils on virtually every mainstream distro, needs no
+    elevated privileges), falling back to reading PCI vendor IDs directly from
+    sysfs if `lspci` itself is missing (rare, e.g. some minimal containers).
+    Not independently verified on live Linux/GPU hardware — same category of
+    gap as this function's own Windows path had before hands-on testing.
     """
     vendor = "none"
     try:
-        out = subprocess.run(
-            ["powershell", "-NoProfile", "-Command", "(Get-CimInstance Win32_VideoController).Name"],
-            capture_output=True, text=True, timeout=10,
-        ).stdout.lower()
+        if platform.system() == "Windows":
+            out = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", "(Get-CimInstance Win32_VideoController).Name"],
+                capture_output=True, text=True, timeout=10,
+            ).stdout.lower()
+        else:
+            out = subprocess.run(
+                ["lspci", "-nn"], capture_output=True, text=True, timeout=10,
+            ).stdout.lower()
         if "nvidia" in out:
             vendor = "nvidia"
-        elif "amd" in out or "radeon" in out:
+        elif "amd" in out or "radeon" in out or "advanced micro devices" in out:
             vendor = "amd"
     except Exception:
-        pass
+        if platform.system() != "Windows":
+            # lspci missing - fall back to PCI vendor IDs from sysfs directly,
+            # no external binary required. 0x10de=NVIDIA, 0x1002=AMD.
+            try:
+                import glob
+                for vendor_file in glob.glob("/sys/class/drm/*/device/vendor"):
+                    with open(vendor_file) as f:
+                        vid = f.read().strip().lower()
+                    if vid == "0x10de":
+                        vendor = "nvidia"
+                        break
+                    elif vid == "0x1002":
+                        vendor = "amd"
+                        break
+            except Exception:
+                pass
     return {
         "backend": "kobold",
         "available": vendor != "none",  # GPU required, no CPU fallback
@@ -127,12 +167,19 @@ def ensure_artifacts(model_id, quantization, on_progress=None):
 
     home = _kobold_home()
     os.makedirs(home, exist_ok=True)
-    exe_path = os.path.join(home, "koboldcpp.exe")
+    is_windows = platform.system() == "Windows"
+    exe_name = "koboldcpp.exe" if is_windows else "koboldcpp"
+    exe_url = KOBOLDCPP_EXE_URL_WINDOWS if is_windows else KOBOLDCPP_EXE_URL_LINUX
+    exe_path = os.path.join(home, exe_name)
 
     if on_progress:
-        on_progress("koboldcpp", "koboldcpp.exe")
+        on_progress("koboldcpp", exe_name)
     if not os.path.exists(exe_path):
-        _download_with_progress(KOBOLDCPP_EXE_URL, exe_path)
+        _download_with_progress(exe_url, exe_path)
+        if not is_windows:
+            # A plain HTTP download never carries the executable bit over
+            # regardless of what the origin GitHub release asset had.
+            os.chmod(exe_path, 0o755)
 
     quant_filename = catalog_entry["quant_filenames"][quantization]
     if on_progress:
@@ -217,6 +264,32 @@ def _assign_job_object(pid):
         return None
 
 
+# --- Linux process-lifecycle equivalent ------------------------------------------
+# Linux has no Job Object API. PR_SET_PDEATHSIG asks the kernel to deliver a
+# signal to *this* (child) process automatically if its direct parent (the
+# server.py process that Popen'd it) dies for any reason, including an abrupt
+# SIGKILL — the closest analog to the Windows Job Object's
+# JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE cascading-kill behavior, tied to the same
+# parent/child relationship (server.py -> koboldcpp), not to linux/main.py's.
+#
+# subprocess.Popen(preexec_fn=...) in a *multi-threaded* parent carries a
+# documented fork-deadlock risk in Python's own docs (fork() only duplicates
+# the calling thread; a lock held by another thread at fork-time stays locked
+# forever in the child) — and server.py is multi-threaded (waitress runs with
+# multiple threads, plus the tagger/captioner background-loading threads).
+# This function is deliberately minimal (a single ctypes call, no allocation
+# or locking) to follow the standard safe pattern, but has not been verified
+# under real concurrent load (e.g. a caption request racing a bulk-tag
+# request) — needs hands-on verification, same category of gap as this file's
+# other Linux-specific additions.
+def _preexec_pdeathsig():
+    try:
+        PR_SET_PDEATHSIG = 1
+        ctypes.CDLL("libc.so.6", use_errno=True).prctl(PR_SET_PDEATHSIG, signal.SIGTERM, 0, 0, 0)
+    except Exception:
+        pass
+
+
 class JoyCaptionerKobold:
     def __init__(self, model_id=DEFAULT_MODEL_ID, quantization=DEFAULT_QUANT, on_progress=None, port=KOBOLD_PORT):
         self.model_id = model_id
@@ -231,7 +304,7 @@ class JoyCaptionerKobold:
         self._start(exe, gguf, mmproj)
 
     def _start(self, exe, gguf, mmproj):
-        # TODO: verify exact flag names/headless behavior against `koboldcpp.exe --help`.
+        is_windows = platform.system() == "Windows"
         self.proc = subprocess.Popen(
             [
                 exe,
@@ -242,26 +315,31 @@ class JoyCaptionerKobold:
                 "--port", str(self.port),
                 "--quiet",
             ],
-            creationflags=subprocess.CREATE_NO_WINDOW,
+            creationflags=subprocess.CREATE_NO_WINDOW if is_windows else 0,
+            preexec_fn=None if is_windows else _preexec_pdeathsig,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        self._job = _assign_job_object(self.proc.pid)
+        if is_windows:
+            self._job = _assign_job_object(self.proc.pid)
         self._wait_ready()
 
     def _wait_ready(self, timeout_s=180):
         # Mirrors windows/main.py's Popen+poll idiom for server.py itself.
-        # TODO: verify KoboldCpp's actual readiness endpoint against a live instance
-        # (guessed as /v1/models here).
+        # KoboldCpp's readiness endpoint (/v1/models) and request/response
+        # shape are confirmed working against a live Windows/GPU instance
+        # (produces real NLP captions end-to-end) — this doesn't differ by
+        # OS, so the Linux port inherits that as proven rather than
+        # speculative.
         for _ in range(timeout_s):
             if self.proc.poll() is not None:
-                raise RuntimeError("koboldcpp.exe exited before becoming ready")
+                raise RuntimeError("koboldcpp exited before becoming ready")
             try:
                 urllib.request.urlopen(f"http://127.0.0.1:{self.port}/v1/models", timeout=2)
                 return
             except Exception:
                 time.sleep(1)
-        raise RuntimeError("koboldcpp.exe did not become ready in time")
+        raise RuntimeError("koboldcpp did not become ready in time")
 
     def caption_image(self, image_path, mode="descriptive", tone="casual", extra_options=None,
                        known_tags=None, max_new_tokens=512):
@@ -270,9 +348,9 @@ class JoyCaptionerKobold:
         with open(image_path, "rb") as f:
             b64 = base64.b64encode(f.read()).decode()
 
-        # TODO: verify this exact request shape against a live KoboldCpp instance —
-        # in particular whether the image goes in messages[].content[].image_url.url
-        # (OpenAI/GPT-4V shape, assumed here) or a different top-level field.
+        # This request shape (OpenAI/GPT-4V-style messages[].content[].image_url.url)
+        # is confirmed working against a live KoboldCpp instance on Windows — carries
+        # over unchanged for Linux since KoboldCpp's HTTP API doesn't differ by OS.
         payload = {
             "messages": [
                 {"role": "system", "content": "You are a helpful image captioner."},

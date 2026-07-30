@@ -18,9 +18,9 @@ _taggers = {}  # Cache taggers by model name
 _tagger_lock = threading.Lock()
 _model_state = {"status": "idle", "model": None}  # idle | downloading | ready | error
 
-# Set by windows/main.py for the packaged standalone build only — a bare `python
-# server.py` dev run (even on Windows) and Docker both leave this unset, so they
-# keep the transformers/bitsandbytes path unchanged.
+# Set by windows/main.py and linux/main.py for their packaged standalone builds
+# only — a bare `python server.py` dev run (even on Windows/Linux) and Docker
+# all leave this unset, so they keep the transformers/bitsandbytes path unchanged.
 CAPTION_BACKEND = os.environ.get('IMAGEDNA_CAPTION_BACKEND', 'transformers')
 
 _captioner = None
@@ -348,7 +348,8 @@ if __name__ == '__main__':
     # Start loading the default model in the background immediately, rather than
     # waiting for the first /api/tag or /api/tags request to trigger it. This lets
     # /api/status (a pure read, never itself a trigger) reflect real load progress
-    # from the moment the process starts, which the Windows launcher polls before
-    # opening its window, and it means Docker readiness reflects real usability sooner.
+    # from the moment the process starts, which the Windows/Linux launchers poll
+    # before opening their window, and it means Docker readiness reflects real
+    # usability sooner.
     threading.Thread(target=get_tagger, daemon=True).start()
     serve(app, host='0.0.0.0', port=5000, threads=8)

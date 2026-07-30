@@ -1,0 +1,9 @@
+pyinstaller==6.19.0
+pywebview==6.1
+# Provides the `gi` module (GObject Introspection bindings) that pywebview's
+# GTK backend and linux/main.py's fatal-error dialog both import. Building
+# this from source requires libgirepository1.0-dev + gobject-introspection +
+# pkg-config present on the BUILD machine (see linux/build.sh's apt package
+# list / .github/workflows/build.yml) — not required on the end user's
+# machine, since the built app only needs the runtime GTK/WebKit2GTK libs.
+PyGObject

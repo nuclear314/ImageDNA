@@ -60,6 +60,23 @@ the selected caption model plus its vision projector (`mmproj`) file.
   downloads and runs KoboldCpp's official, unmodified binary as a separate subprocess — it is not linked
   against or vendored in this repository.
 
+### Step 2 on the Linux standalone build
+
+The Linux standalone build uses the same KoboldCpp-based backend as the Windows standalone build (see
+above) — no `torch`/`transformers`/`bitsandbytes` in-process, same rationale (small release size, AMD
+support via Vulkan).
+
+- **Opt-in, on demand:** nothing is downloaded until you turn on Natural Language Captioning in Settings.
+  `koboldcpp` plus the GGUF/mmproj files (several GB) download once and are cached under
+  `~/.local/share/ImageDNA/kobold` and `~/.local/share/ImageDNA/models`.
+- **GPU required:** same as Windows — an NVIDIA or AMD GPU (AMD via KoboldCpp's Vulkan backend), no CPU
+  fallback. GPU vendor detection shells out to `lspci` (falling back to reading PCI vendor IDs from
+  `/sys/class/drm/` if `lspci` itself isn't present).
+- **Caption model / quantization:** same catalog and GGUF quant levels as Windows (JoyCaption Beta One /
+  NSFWVision v5; Q4_K_M / Q5_K_M / Q6_K or Q8_0 depending on model).
+- **Attribution:** same as Windows — KoboldCpp's own code is AGPL v3.0 (llama.cpp is MIT); ImageDNA runs
+  its official, unmodified Linux binary as a separate subprocess.
+
 ## Random Prompt Generator
 
 Click the **dice icon** in the top-left header to switch to the Random Prompt Generator. This tool builds structured prompts from the selected model's tag vocabulary.
@@ -132,6 +149,25 @@ or a release if one's been published, then just run the exe.
 
 First run requires internet access to download the tagger model from Hugging Face into
 `%APPDATA%\ImageDNA\models`; it's cached there afterward, so subsequent launches work offline.
+
+## How to run locally (Linux)
+
+A packaged Linux build (`ImageDNA-x86_64.AppImage`) runs standalone — no Python, Node, or Docker needed.
+Grab a build from CI (see [How to build the Linux standalone app](#how-to-build-the-linux-standalone-app))
+or a release if one's been published, then run the AppImage.
+
+**Prerequisites:**
+- GTK3 and WebKit2GTK runtime libraries — on Debian/Ubuntu: `libwebkit2gtk-4.1-0` (or the `-4.0` variant on
+  older distros; `pywebview` falls back automatically). These are **not** bundled into the AppImage (see
+  [How to build the Linux standalone app](#how-to-build-the-linux-standalone-app) for why) and must already
+  be present on the system, similar to how the Windows build relies on the OS already having WebView2.
+- FUSE (`libfuse2` on Debian/Ubuntu) to run the AppImage directly. If FUSE isn't available (e.g. inside
+  some containers), run it with `--appimage-extract-and-run` instead.
+- The downloaded AppImage needs its executable bit set before first run:
+  `chmod +x ImageDNA-x86_64.AppImage`.
+
+First run requires internet access to download the tagger model from Hugging Face into
+`~/.local/share/ImageDNA/models`; it's cached there afterward, so subsequent launches work offline.
 
 ## How to run locally (Development)
 
@@ -245,3 +281,63 @@ The output lands in `release\ImageDNA\`. Launch the app with `release\ImageDNA\I
 First run requires internet access to download the tagger model from Hugging Face into
 `%APPDATA%\ImageDNA\models`; it's cached there afterward, so subsequent launches work offline. See
 [How to run locally (Windows)](#how-to-run-locally-windows) for the runtime prerequisites end users need.
+
+## How to build the Linux standalone app
+
+`linux/` contains a PyInstaller-based launcher that bundles an embedded Python server and opens the app in
+a native window (via `pywebview`'s GTK/WebKit2GTK backend), then wraps the result into a single portable
+`.AppImage` — no Python, Node, or Docker required by the end user, mirroring the Windows standalone build.
+
+**Prerequisites:**
+- Linux (built and tested against Ubuntu 22.04 — see the note on glibc compatibility below)
+- Python 3.12+
+- Node.js 24+
+- GTK/WebKit build and runtime dependencies (Debian/Ubuntu):
+  ```bash
+  sudo apt-get install python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1 \
+    libwebkit2gtk-4.1-0 libgirepository1.0-dev pkg-config fuse libfuse2
+  ```
+- A virtual environment at the repo root (`.venv`) with `linux/requirements-linux.txt` installed —
+  `build.sh` activates it automatically if present
+
+```bash
+cd linux
+chmod +x build.sh
+./build.sh
+```
+
+This runs a full build: compiles the frontend, builds the PyInstaller launcher, sets up the embedded
+Python server runtime (downloading a [`python-build-standalone`](https://github.com/astral-sh/python-build-standalone)
+release once, cached under `linux/cache/`, since python.org publishes no Linux equivalent of its Windows
+embeddable package), then packages everything into an AppImage.
+
+For fast iteration on just the launcher (`linux/main.py` or `imagedna.spec`), skip re-provisioning the
+embedded server runtime:
+
+```bash
+./build.sh --skip-server
+```
+
+This only works if a full build has already populated `release/ImageDNA/server/` — it reuses that
+directory instead of rebuilding it. Note that `--skip-server` will **not** pick up changes to
+`requirements.txt` (or other server-side changes), since it skips the step that reinstalls those packages
+into the embedded runtime — run a full `build.sh` after touching `requirements.txt`.
+
+The output lands at `release/ImageDNA-x86_64.AppImage`. Launch it with
+`chmod +x release/ImageDNA-x86_64.AppImage && ./release/ImageDNA-x86_64.AppImage`.
+
+**Why GTK/WebKit2GTK aren't bundled into the AppImage:** PyInstaller's built-in hooks for `gi.repository.Gtk`
+auto-bundle the *build machine's own* GTK shared libraries the moment `pywebview`'s GTK backend imports
+`Gtk`, but there's no equivalent hook for `WebKit2`/`Soup` — bundling GTK alone would produce a frozen GTK3
+talking to a separately-versioned host WebKit2GTK (which links its own GTK3), a likely ABI mismatch. So
+`linux/imagedna.spec` deliberately strips those auto-bundled libraries back out and treats the whole
+GTK3/WebKit2GTK/Soup stack as a system prerequisite instead — see the prerequisites list in
+[How to run locally (Linux)](#how-to-run-locally-linux).
+
+**glibc compatibility:** the AppImage's floor is whatever glibc the build machine has. CI builds on
+`ubuntu-22.04` (not the newest available runner) specifically so the resulting AppImage runs on a wider
+range of end-user distros — an AppImage built on a newer glibc won't run on an older one.
+
+First run requires internet access to download the tagger model from Hugging Face into
+`~/.local/share/ImageDNA/models`; it's cached there afterward, so subsequent launches work offline. See
+[How to run locally (Linux)](#how-to-run-locally-linux) for the runtime prerequisites end users need.
