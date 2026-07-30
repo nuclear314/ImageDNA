@@ -131,7 +131,13 @@ try:
     # backend auto-detection, so a dev machine that also happens to have
     # PyQt5 installed can't silently flip the packaged app onto the
     # untested Qt backend.
-    webview.start(gui='gtk')
+    # pywebview defaults to private_mode=True (cookies/localStorage discarded on
+    # close) unless told otherwise here at start(), not create_window() — passing
+    # user_data alone (for HF_HOME/kobold above) never touched this, so Settings/
+    # excluded-tags/etc previously reset every launch despite living in
+    # localStorage. storage_path pins WebKitGTK's profile under the same
+    # XDG data folder so it survives close/reopen the same way HF_HOME does.
+    webview.start(gui='gtk', private_mode=False, storage_path=os.path.join(user_data, 'webview'))
     # webview.start() blocks until the window is closed
 except Exception as exc:
     logging.exception('Failed to open the app window')

@@ -290,6 +290,60 @@ def _preexec_pdeathsig():
         pass
 
 
+def _kill_stale_process_on_port(port):
+    """Best-effort: if a previous koboldcpp instance is still bound to our port —
+    orphaned by a crash, a force-quit, or the Job Object/PR_SET_PDEATHSIG cleanup
+    above not firing (both are explicitly flagged elsewhere in this file as
+    unverified under real-world conditions) — kill it before starting a fresh
+    one. Without this, _wait_ready()'s HTTP probe would happily report "ready"
+    by talking to the STALE process instead of the one we just spawned, so the
+    new subprocess.Popen() either fails to bind the port and dies unnoticed, or
+    (worse) both end up alive: two koboldcpp processes, with our self.proc
+    handle pointing at the wrong one and no way to ever kill the real one
+    later. This closes that gap by clearing the port ourselves first.
+    """
+    try:
+        if platform.system() == "Windows":
+            out = subprocess.run(
+                ["netstat", "-ano", "-p", "tcp"], capture_output=True, text=True, timeout=10,
+            ).stdout
+            pids = set()
+            for line in out.splitlines():
+                parts = line.split()
+                if len(parts) >= 5 and parts[0].upper() == "TCP" and parts[3].upper() == "LISTENING" \
+                        and parts[1].endswith(f":{port}"):
+                    pids.add(parts[4])
+            for pid in pids:
+                subprocess.run(["taskkill", "/F", "/PID", pid], capture_output=True, timeout=10)
+        else:
+            # Parsed directly from /proc rather than shelling out to lsof/fuser,
+            # which aren't guaranteed installed — same rationale as
+            # detect_capability()'s sysfs fallback below it.
+            port_hex = f"{port:04X}"
+            inodes = set()
+            with open("/proc/net/tcp") as f:
+                next(f)
+                for line in f:
+                    fields = line.split()
+                    if fields[1].split(":")[1] == port_hex and fields[3] == "0A":  # 0A = LISTEN
+                        inodes.add(fields[9])
+            if inodes:
+                import glob
+                for fd_link in glob.glob("/proc/*/fd/*"):
+                    try:
+                        target = os.readlink(fd_link)
+                    except OSError:
+                        continue
+                    if target.startswith("socket:[") and target[8:-1] in inodes:
+                        try:
+                            os.kill(int(fd_link.split("/")[2]), signal.SIGKILL)
+                        except (OSError, ValueError):
+                            pass
+        time.sleep(1)  # give the OS a moment to actually release the port
+    except Exception:
+        pass
+
+
 class JoyCaptionerKobold:
     def __init__(self, model_id=DEFAULT_MODEL_ID, quantization=DEFAULT_QUANT, on_progress=None, port=KOBOLD_PORT):
         self.model_id = model_id
@@ -305,6 +359,7 @@ class JoyCaptionerKobold:
 
     def _start(self, exe, gguf, mmproj):
         is_windows = platform.system() == "Windows"
+        _kill_stale_process_on_port(self.port)
         self.proc = subprocess.Popen(
             [
                 exe,
@@ -322,7 +377,20 @@ class JoyCaptionerKobold:
         )
         if is_windows:
             self._job = _assign_job_object(self.proc.pid)
-        self._wait_ready()
+        try:
+            self._wait_ready()
+        except Exception:
+            # _wait_ready raising (timeout or crash-detection) leaves self.proc
+            # still running (the timeout case) or already dead (the crash case).
+            # Either way, __init__ is about to raise past this point without ever
+            # handing the caller an instance to call .unload() on later, so the
+            # subprocess would otherwise be orphaned — still holding VRAM — while
+            # server.py's get_captioner() sees _captioner as None and spawns a
+            # fresh one on the next request/retry. Clean up before re-raising so a
+            # slow-loading (e.g. larger) model can't leave two koboldcpp processes
+            # running at once.
+            self.unload()
+            raise
 
     def _wait_ready(self, timeout_s=180):
         # Mirrors windows/main.py's Popen+poll idiom for server.py itself.
