@@ -6,4 +6,16 @@ pywebview==6.1
 # pkg-config present on the BUILD machine (see linux/build.sh's apt package
 # list / .github/workflows/build.yml) — not required on the end user's
 # machine, since the built app only needs the runtime GTK/WebKit2GTK libs.
-PyGObject
+# >=3.57.0 required: PyGObject 3.56.0-3.56.2 crash with
+# "AssertionError: unix_signal_add_full was set deprecated but wasn't added
+# to __all__" at gi.repository.Gtk import time on any end-user system running
+# GLib >=2.88 (e.g. current Arch/Fedora Rawhide) — GLib 2.88 newly marks
+# unix_signal_add_full deprecated and PyGObject's own override list wasn't
+# updated to match until 3.57.0 fixed it upstream
+# (https://gitlab.gnome.org/GNOME/pygobject/-/work_items/757). Since PyGObject
+# is bundled by PyInstaller (unlike libglib/libgtk/libwebkit2gtk themselves,
+# which imagedna.spec deliberately excludes as system prerequisites — see
+# its comment), an unpinned install here silently ships whatever PyGObject
+# happened to resolve on the BUILD machine, which only fails on end-user
+# machines with newer system GLib than the build machine had.
+PyGObject>=3.57.0
