@@ -289,14 +289,17 @@ a native window (via `pywebview`'s GTK/WebKit2GTK backend), then wraps the resul
 `.AppImage` — no Python, Node, or Docker required by the end user, mirroring the Windows standalone build.
 
 **Prerequisites:**
-- Linux (built and tested against Ubuntu 22.04 — see the note on glibc compatibility below)
+- Linux (built and tested against Ubuntu 24.04 — see the note on glibc compatibility below)
 - Python 3.12+
 - Node.js 24+
 - GTK/WebKit build and runtime dependencies (Debian/Ubuntu):
   ```bash
   sudo apt-get install python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1 \
-    libwebkit2gtk-4.1-0 libgirepository1.0-dev pkg-config fuse libfuse2
+    libwebkit2gtk-4.1-0 libgirepository-2.0-dev pkg-config fuse libfuse2
   ```
+  `libgirepository-2.0-dev` (not the older `libgirepository1.0-dev`) is required because current
+  PyGObject (>=3.51.0) builds against the newer `girepository-2.0`; this package doesn't exist yet on
+  Ubuntu 22.04 and older, which is why CI moved to 24.04 (see below) rather than staying on 22.04.
 - A virtual environment at the repo root (`.venv`) with `linux/requirements-linux.txt` installed —
   `build.sh` activates it automatically if present
 
@@ -334,9 +337,13 @@ talking to a separately-versioned host WebKit2GTK (which links its own GTK3), a 
 GTK3/WebKit2GTK/Soup stack as a system prerequisite instead — see the prerequisites list in
 [How to run locally (Linux)](#how-to-run-locally-linux).
 
-**glibc compatibility:** the AppImage's floor is whatever glibc the build machine has. CI builds on
-`ubuntu-22.04` (not the newest available runner) specifically so the resulting AppImage runs on a wider
-range of end-user distros — an AppImage built on a newer glibc won't run on an older one.
+**glibc compatibility:** the AppImage's floor is whatever glibc the build machine has. CI pins an explicit
+runner rather than floating on the newest available, so the resulting AppImage's compatibility floor stays
+predictable — an AppImage built on a newer glibc won't run on an older one. That pin is currently
+`ubuntu-24.04` rather than `ubuntu-22.04`: 22.04's `gobject-introspection` predates `girepository-2.0`,
+which current PyGObject requires to build (see the prerequisites above), so the glibc floor was traded
+upward out of necessity, not preference — worth revisiting if PyGObject ever restores a girepository-1.0
+fallback or a girepository-2.0 backport becomes available for 22.04.
 
 First run requires internet access to download the tagger model from Hugging Face into
 `~/.local/share/ImageDNA/models`; it's cached there afterward, so subsequent launches work offline. See

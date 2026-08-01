@@ -20,6 +20,18 @@ of transformers/bitsandbytes. The Linux launcher uses `pywebview`'s GTK/WebKit2G
 explicitly via `webview.start(gui='gtk')`) and packages as a single `.AppImage`, since Linux has no
 WebView2-equivalent preinstalled runtime and no single "just run it" file convention the way a `.exe` is on
 Windows; GTK3/WebKit2GTK are treated as a system prerequisite rather than bundled (see `linux/imagedna.spec`).
+The Linux CI build (`.github/workflows/build.yml`'s `linux-build` job) pins an explicit Ubuntu version
+(currently `24.04`) rather than floating, trading off two opposing constraints: an older base widens the
+built AppImage's glibc-compatibility floor, but current PyGObject (`>=3.51.0`) only builds against the
+newer `girepository-2.0`, which isn't packaged on Ubuntu 22.04 and older — so the pin is the oldest Ubuntu
+version new enough to provide it, not the oldest one glibc alone would allow. Separately, `linux/build.sh`
+source-patches the installed PyGObject's `gi/overrides/GLib.py` right after `pip install` (unconditionally,
+every build) to work around an unresolved upstream bug (confirmed still present in PyGObject 3.57.0,
+https://gitlab.gnome.org/GNOME/pygobject/-/work_items/757): on end-user systems where GLib has fully
+removed the legacy `unix_signal_add` symbol in favor of a platform-specific replacement (GLib `>=2.88`,
+e.g. current Arch/Artix/Fedora Rawhide), PyGObject's own override-loading crashes at
+`gi.repository.Gtk` import time with `AssertionError: unix_signal_add_full was set deprecated but wasn't
+added to __all__` — no PyPI version of PyGObject fixes this, only the source patch does.
 
 ## Architecture
 

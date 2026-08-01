@@ -47,9 +47,14 @@ jobs:
 
   linux-build:
     # Not ubuntu-latest - AppImages built on newer glibc don't run on older
-    # distros, so pin an explicit older base for a wider compatibility floor
-    # (see LINUX_STANDALONE_BUILD.md's glibc-skew concern).
-    runs-on: ubuntu-22.04
+    # distros, so pin an explicit base rather than floating (see
+    # LINUX_STANDALONE_BUILD.md's glibc-skew concern). ubuntu-22.04 was tried
+    # first for the widest glibc floor, but its gobject-introspection is too
+    # old to provide the girepository-2.0 pkg-config module current
+    # PyGObject (>=3.51.0) requires to build - see the linux/build.sh patch
+    # step's comment for the related runtime-side GLib 2.88 story.
+    # ubuntu-24.04 is the oldest runner that has it.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -63,7 +68,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1 \
-            libwebkit2gtk-4.1-0 libgirepository1.0-dev pkg-config \
+            libwebkit2gtk-4.1-0 libgirepository-2.0-dev pkg-config \
             fuse libfuse2
       - run: npm install
       - run: chmod +x linux/build.sh && linux/build.sh
