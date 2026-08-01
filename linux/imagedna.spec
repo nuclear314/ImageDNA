@@ -40,15 +40,26 @@ a = Analysis(
 # machinery — so this filtering is safe as long as the target system has
 # GTK3 + WebKit2GTK installed (documented as a Linux prerequisite in README).
 #
-# VERIFY this substring list against the real a.binaries/a.datas entries
-# PyInstaller produces on the actual build machine before relying on it —
-# SONAMEs vary by distro/version. Uncomment the print() below to inspect.
-# print('[spec] binaries:', [b[0] for b in a.binaries])
-_EXCLUDE_SO_SUBSTRINGS = (
-    'libgtk-3', 'libgdk-3', 'libwebkit2gtk', 'libjavascriptcoregtk',
-    'libsoup', 'libglib-2.0', 'libgobject-2.0', 'libgio-2.0',
-)
-a.binaries = [b for b in a.binaries if not any(s in b[0] for s in _EXCLUDE_SO_SUBSTRINGS)]
+# A fixed substring list of *names* (libgtk-3, libwebkit2gtk, ...) only
+# catches libraries we thought to enumerate — confirmed in practice this
+# isn't enough: WebKit2GTK/GLib's own transitive dependency tree drags in
+# dozens of unrelated system libraries (libmount, libpcre2, libblkid,
+# libselinux, ...) that PyInstaller's automatic ldd-walking bundles right
+# alongside them. A bundled build-machine libmount.so.1 this way shadowed an
+# end-user system's own newer libgio-2.0.so.0's runtime dependency on
+# libmount, crashing with "version `MOUNT_2_40' not found" — the exact
+# ABI-mismatch risk this file already exists to prevent, just one level
+# removed through GLib's own dependency graph instead of GLib itself.
+#
+# Filtering by *source path* instead catches that whole transitive tree in
+# one pass: anything PyInstaller resolved from a standard system library
+# directory is, definitionally, something the target system already
+# provides and should keep resolving on its own at runtime — nothing this
+# launcher needs (pywebview, gi, PyInstaller's own bootstrap) should
+# legitimately require bundling a system multiarch library, since
+# onnxruntime/numpy/etc. live in the separately-provisioned embedded server
+# runtime (see this file's top comment), not here.
+a.binaries = [b for b in a.binaries if not b[1].startswith(('/usr/lib/', '/lib/'))]
 a.datas = [d for d in a.datas if 'gi_typelibs' not in d[0]]
 
 pyz = PYZ(a.pure)
