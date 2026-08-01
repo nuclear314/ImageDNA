@@ -56,6 +56,51 @@ fi
 
 pip install -r requirements-linux.txt --quiet
 
+# Workaround for an unresolved PyGObject bug (confirmed still present in
+# 3.57.0, the latest upstream as of this writing:
+# https://gitlab.gnome.org/GNOME/pygobject/-/work_items/757). gi/overrides/
+# GLib.py registers "unix_signal_add_full" as deprecated via the platform-
+# specific GLibPlatform.signal_add fallback (hit when GLib fully removes the
+# legacy GLib.unix_signal_add symbol, e.g. GLib >=2.88 on current Arch/Artix/
+# Fedora Rawhide) without also adding it to __all__ or assigning it as a
+# module attribute — so gi/overrides/__init__.py's load_overrides() then
+# fails its own getattr(proxy, attr) sanity check and raises "AssertionError:
+# unix_signal_add_full was set deprecated but wasn't added to __all__" the
+# first time anything imports gi.repository.Gtk (which pywebview's GTK
+# backend does unconditionally). No PyPI/pip version fixes this, so patch
+# the installed override module directly instead. Idempotent and a safe
+# no-op (with a warning) if the exact source pattern ever changes upstream.
+echo "    Patching PyGObject GLib override (unix_signal_add_full workaround)..."
+python - <<'PYEOF'
+import gi, os
+
+path = os.path.join(os.path.dirname(gi.__file__), "overrides", "GLib.py")
+with open(path, "r", encoding="utf-8") as f:
+    src = f.read()
+
+old = '''if hasattr(GLibPlatform, "signal_add"):
+    deprecated_attr(
+        "GLib", "unix_signal_add_full", f"{GLibPlatform._namespace}.signal_add"
+    )'''
+new = '''if hasattr(GLibPlatform, "signal_add") and "unix_signal_add_full" not in __all__:
+    unix_signal_add_full = GLibPlatform.signal_add
+    __all__.append("unix_signal_add_full")
+    deprecated_attr(
+        "GLib", "unix_signal_add_full", f"{GLibPlatform._namespace}.signal_add"
+    )'''
+
+if new in src:
+    print(f"    Already patched: {path}")
+elif old in src:
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(src.replace(old, new))
+    print(f"    Patched: {path}")
+else:
+    print(f"    WARNING: expected pattern not found in {path} - PyGObject's "
+          f"GLib override source may have changed upstream; skipping the "
+          f"unix_signal_add_full workaround patch (see build.sh comment).")
+PYEOF
+
 # PyInstaller's --noconfirm wipes the whole release/ImageDNA/ folder before
 # rebuilding (even with --skip-server), so move the existing server/ runtime
 # aside first and restore it afterward instead of losing it. Same rationale
