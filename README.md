@@ -295,11 +295,13 @@ a native window (via `pywebview`'s GTK/WebKit2GTK backend), then wraps the resul
 - GTK/WebKit build and runtime dependencies (Debian/Ubuntu):
   ```bash
   sudo apt-get install python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1 \
-    libwebkit2gtk-4.1-0 libgirepository-2.0-dev pkg-config fuse libfuse2
+    libwebkit2gtk-4.1-0 libgirepository-2.0-dev libcairo2-dev pkg-config fuse libfuse2
   ```
   `libgirepository-2.0-dev` (not the older `libgirepository1.0-dev`) is required because current
   PyGObject (>=3.51.0) builds against the newer `girepository-2.0`; this package doesn't exist yet on
   Ubuntu 22.04 and older, which is why CI moved to 24.04 (see below) rather than staying on 22.04.
+  `libcairo2-dev` is needed because building PyGObject from source pulls in `pycairo` as a build
+  dependency, which needs Cairo's own headers/pkg-config file to compile.
 - A virtual environment at the repo root (`.venv`) with `linux/requirements-linux.txt` installed —
   `build.sh` activates it automatically if present
 
