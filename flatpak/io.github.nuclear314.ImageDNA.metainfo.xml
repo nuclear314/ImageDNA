@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.nuclear314.ImageDNA</id>
+  <name>ImageDNA</name>
+  <summary>Extract semantic tags from images and generate structured prompts</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <!-- No LICENSE file exists in the repo yet, so this is a placeholder —
+       set to the project's actual license before this manifest is used for
+       a real distributed build. Required by Flathub if ever submitted
+       there; harmless as a placeholder for a self-distributed CI artifact. -->
+  <project_license>LicenseRef-proprietary</project_license>
+  <developer id="io.github.nuclear314">
+    <name>nuclear314</name>
+  </developer>
+  <description>
+    <p>
+      ImageDNA extracts semantic tags from images using the WD14 ONNX tagger
+      model and generates structured prompts from that model's tag
+      vocabulary, for AI art workflows. It also supports natural-language
+      captioning (JoyCaption) and EXIF/generation-parameter extraction.
+    </p>
+  </description>
+  <!--
+    No <content_rating> block yet. This app's tagging/captioning features
+    are intentionally general-purpose for AI art workflows and can surface
+    NSFW-adjacent tags/captions depending on the input image and the user's
+    own settings (see App.tsx's "breast consolidation"/masterpiece toggles) —
+    an oars-1.1 rating should be filled in deliberately, not guessed, before
+    any real Flathub submission. Not required for a self-distributed .flatpak
+    CI artifact.
+  -->
+  <launchable type="desktop-id">io.github.nuclear314.ImageDNA.desktop</launchable>
+  <url type="homepage">https://github.com/nuclear314/ImageDNA</url>
+  <releases>
+    <release version="0.0.0" date="2026-08-03">
+      <description>
+        <p>Initial Flatpak packaging.</p>
+      </description>
+    </release>
+  </releases>
+</component>

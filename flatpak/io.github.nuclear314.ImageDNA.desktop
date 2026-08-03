@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=ImageDNA
+Comment=Extract semantic tags from images and generate structured prompts
+Exec=imagedna
+Icon=io.github.nuclear314.ImageDNA
+Categories=Graphics;
+Terminal=false
