@@ -31,5 +31,5 @@ release/
 windows/build/
 windows/cache/
 windows/_server_backup/
-WINDOWS_JOYCAPTION_GGUF.md
+PHASE0_TESTING.md
 LINUX_STANDALONE_BUILD.md
