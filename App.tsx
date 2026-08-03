@@ -9,7 +9,7 @@ import {
   Tag as TagIcon,
   Sliders
 } from 'lucide-react';
-import { AppState, AppView, Tag, CaptionQuantization, CaptionCapability } from './types';
+import { AppState, AppView, Tag, CaptionQuantization, CaptionCapability, CaptionConnectionMode } from './types';
 import { filterAndFormatTags } from './lib/tagFiltering';
 import { KOBOLD_QUANT_OPTIONS_BY_MODEL, KOBOLD_CAPTION_MODELS } from './lib/captionOptions';
 import { useLocalStorage } from './lib/useLocalStorage';
@@ -55,6 +55,9 @@ const App: React.FC = () => {
   const [enableJoyCaption, setEnableJoyCaption] = useLocalStorage('imagedna:enableJoyCaption', false);
   const [captionQuantization, setCaptionQuantization] = useLocalStorage<CaptionQuantization>('imagedna:captionQuantization', '4bit');
   const [captionModel, setCaptionModel] = useLocalStorage<string>('imagedna:captionModel', KOBOLD_CAPTION_MODELS[0].id);
+  const [koboldConnectionMode, setKoboldConnectionMode] = useLocalStorage<CaptionConnectionMode>('imagedna:koboldConnectionMode', 'local');
+  const [koboldRemoteUrl, setKoboldRemoteUrl] = useLocalStorage('imagedna:koboldRemoteUrl', '');
+  const [koboldRemoteApiKey, setKoboldRemoteApiKey] = useLocalStorage('imagedna:koboldRemoteApiKey', '');
   const [copied, setCopied] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -92,6 +95,15 @@ const App: React.FC = () => {
           : ['4bit', '8bit', 'bf16'];
         if (!validQuants.includes(captionQuantization)) {
           setCaptionQuantization((data.backend === 'kobold' ? 'Q4_K_M' : '4bit') as CaptionQuantization);
+        }
+        // No local GPU means the locally-spawned KoboldCpp path can't work at
+        // all (no CPU fallback) — default into remote connection mode instead
+        // of a toggle that would just error out. Only applies the first time;
+        // it won't fight a user who's deliberately switched back to 'local'
+        // since koboldConnectionMode itself is what gets checked, not a
+        // separate "have they touched this" flag.
+        if (data.backend === 'kobold' && data.gpu_vendor === 'none' && koboldConnectionMode === 'local') {
+          setKoboldConnectionMode('remote');
         }
       })
       .catch(() => { /* leave as null — badge just stays hidden */ });
@@ -238,7 +250,7 @@ const App: React.FC = () => {
         className="hidden"
         accept="image/*"
       />
-      <Header isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} onSettingsClick={() => setIsSettingsOpen(true)} currentView={currentView} onViewChange={setCurrentView} captionCapability={enableJoyCaption ? captionCapability : null} />
+      <Header isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} onSettingsClick={() => setIsSettingsOpen(true)} currentView={currentView} onViewChange={setCurrentView} captionCapability={enableJoyCaption ? captionCapability : null} koboldConnectionMode={koboldConnectionMode} />
 
       <SettingsModal
         isOpen={isSettingsOpen}
@@ -270,7 +282,13 @@ const App: React.FC = () => {
             fetch('/api/caption-enable', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ quantization: captionQuantization, caption_model: captionModel }),
+              body: JSON.stringify({
+                quantization: captionQuantization,
+                caption_model: captionModel,
+                ...(koboldConnectionMode === 'remote'
+                  ? { remote_url: koboldRemoteUrl, api_key: koboldRemoteApiKey || undefined }
+                  : {}),
+              }),
             }).catch(() => { /* best-effort — errors surface via /api/caption-status */ });
           }
         }}
@@ -280,6 +298,12 @@ const App: React.FC = () => {
         captionModel={captionModel}
         setCaptionModel={setCaptionModel}
         captionModels={KOBOLD_CAPTION_MODELS}
+        koboldConnectionMode={koboldConnectionMode}
+        setKoboldConnectionMode={setKoboldConnectionMode}
+        koboldRemoteUrl={koboldRemoteUrl}
+        setKoboldRemoteUrl={setKoboldRemoteUrl}
+        koboldRemoteApiKey={koboldRemoteApiKey}
+        setKoboldRemoteApiKey={setKoboldRemoteApiKey}
       />
       
       {currentView === 'promptGenerator' && (
@@ -460,6 +484,9 @@ const App: React.FC = () => {
                     knownTags={result.tags.map(t => t.label)}
                     quantization={captionQuantization}
                     captionModel={captionCapability?.backend === 'kobold' ? captionModel : null}
+                    connectionMode={captionCapability?.backend === 'kobold' ? koboldConnectionMode : null}
+                    remoteUrl={koboldRemoteUrl}
+                    apiKey={koboldRemoteApiKey}
                   />
                 )}
               </div>

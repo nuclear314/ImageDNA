@@ -53,15 +53,17 @@ def get_tagger(model_name=None):
         return _taggers[model_name]
 
 
-def get_captioner(quantization=None, model_id=None):
+def get_captioner(quantization=None, model_id=None, remote_url=None, api_key=None):
     global _captioner
     with _captioner_lock:
         if CAPTION_BACKEND == 'kobold':
             from joycaptioner_kobold import DEFAULT_MODEL_ID, DEFAULT_QUANT
             model_id = model_id or DEFAULT_MODEL_ID
             quantization = quantization or DEFAULT_QUANT
+            remote_url = remote_url.rstrip('/') if remote_url else None
             if (_captioner is not None and getattr(_captioner, 'model_id', None) == model_id
-                    and _captioner.quantization == quantization):
+                    and _captioner.quantization == quantization
+                    and getattr(_captioner, 'remote_url', None) == remote_url):
                 return _captioner
         else:
             quantization = quantization or '4bit'
@@ -94,7 +96,8 @@ def get_captioner(quantization=None, model_id=None):
             _captioner = None
         try:
             if CAPTION_BACKEND == 'kobold':
-                _captioner = JoyCaptionerKobold(model_id=model_id, quantization=quantization, on_progress=_kobold_progress)
+                _captioner = JoyCaptionerKobold(model_id=model_id, quantization=quantization, on_progress=_kobold_progress,
+                                                 remote_url=remote_url, api_key=api_key)
             else:
                 _captioner = JoyCaptioner(quantization=quantization)
         except Exception as e:
@@ -106,9 +109,9 @@ def get_captioner(quantization=None, model_id=None):
         return _captioner
 
 
-def _try_get_captioner(quantization, model_id):
+def _try_get_captioner(quantization, model_id, remote_url=None, api_key=None):
     try:
-        get_captioner(quantization, model_id)
+        get_captioner(quantization, model_id, remote_url, api_key)
     except Exception:
         pass  # errors are already surfaced via _caption_state for /api/caption-status to report
 
@@ -124,6 +127,10 @@ def get_caption_capability():
         try:
             from joycaptioner_kobold import detect_capability
             _caption_capability = detect_capability()
+            # A missing local GPU no longer means the feature is unusable —
+            # remote connection mode doesn't need one. gpu_vendor/cuda still
+            # reflect real local hardware, used to gate the "Local" option only.
+            _caption_capability["available"] = True
         except ImportError:
             _caption_capability = {"backend": "kobold", "available": False, "cuda": False, "gpu_vendor": "none"}
         return _caption_capability
@@ -174,6 +181,8 @@ def caption_image():
     tone = request.form.get('tone', 'casual')
     quantization = request.form.get('quantization') or None
     caption_model = request.form.get('caption_model') or None  # kobold backend only
+    remote_url = request.form.get('kobold_remote_url') or None  # kobold backend, remote connection mode only
+    api_key = request.form.get('kobold_api_key') or None
 
     extra_options_raw = request.form.get('extra_options')
     try:
@@ -192,7 +201,7 @@ def caption_image():
         file.stream.seek(0)
         file.save(tmp_path)
         try:
-            captioner = get_captioner(quantization, caption_model)
+            captioner = get_captioner(quantization, caption_model, remote_url, api_key)
         except ImportError:
             return jsonify({
                 "error": "missing_dependencies",
@@ -222,7 +231,9 @@ def caption_enable():
     payload = request.get_json(silent=True) or {}
     quantization = payload.get('quantization') or None
     caption_model = payload.get('caption_model') or None
-    threading.Thread(target=_try_get_captioner, args=(quantization, caption_model), daemon=True).start()
+    remote_url = payload.get('remote_url') or None
+    api_key = payload.get('api_key') or None
+    threading.Thread(target=_try_get_captioner, args=(quantization, caption_model, remote_url, api_key), daemon=True).start()
     return jsonify({"status": "started"})
 
 

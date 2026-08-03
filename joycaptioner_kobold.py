@@ -345,13 +345,28 @@ def _kill_stale_process_on_port(port):
 
 
 class JoyCaptionerKobold:
-    def __init__(self, model_id=DEFAULT_MODEL_ID, quantization=DEFAULT_QUANT, on_progress=None, port=KOBOLD_PORT):
+    def __init__(self, model_id=DEFAULT_MODEL_ID, quantization=DEFAULT_QUANT, on_progress=None, port=KOBOLD_PORT,
+                 remote_url=None, api_key=None):
         self.model_id = model_id
         self.quantization = quantization
         self.port = port
         self.proc = None
         self._job = None
+        self.remote_url = remote_url.rstrip('/') if remote_url else None
+        self.api_key = api_key or None
 
+        if self.remote_url:
+            # No download, no subprocess, no Job Object/PR_SET_PDEATHSIG/stale-port
+            # cleanup below — none of that applies to an instance we don't own the
+            # lifecycle of. self.proc stays None, so unload()'s existing guard
+            # already makes it a correct no-op for this path.
+            self.base_url = self.remote_url
+            if on_progress:
+                on_progress("connecting", self.remote_url)
+            self._wait_ready_remote()
+            return
+
+        self.base_url = f"http://127.0.0.1:{self.port}"
         exe, gguf, mmproj = ensure_artifacts(model_id, quantization, on_progress)
         if on_progress:
             on_progress("starting", None)
@@ -403,11 +418,30 @@ class JoyCaptionerKobold:
             if self.proc.poll() is not None:
                 raise RuntimeError("koboldcpp exited before becoming ready")
             try:
-                urllib.request.urlopen(f"http://127.0.0.1:{self.port}/v1/models", timeout=2)
+                urllib.request.urlopen(f"{self.base_url}/v1/models", timeout=2)
                 return
             except Exception:
                 time.sleep(1)
         raise RuntimeError("koboldcpp did not become ready in time")
+
+    def _wait_ready_remote(self, timeout_s=15):
+        # No process of our own to poll here — just confirm the user-supplied
+        # endpoint is actually reachable, with a clear, distinct error message
+        # from the local-spawn timeout above so caption-status doesn't say
+        # "koboldcpp did not become ready" about a host we never launched.
+        req = urllib.request.Request(f"{self.base_url}/v1/models", headers=self._auth_headers())
+        last_err = None
+        for _ in range(timeout_s):
+            try:
+                urllib.request.urlopen(req, timeout=2)
+                return
+            except Exception as e:
+                last_err = e
+                time.sleep(1)
+        raise RuntimeError(f"Could not reach remote KoboldCpp at {self.remote_url}: {last_err}")
+
+    def _auth_headers(self):
+        return {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
 
     def caption_image(self, image_path, mode="descriptive", tone="casual", extra_options=None,
                        known_tags=None, max_new_tokens=512):
@@ -432,10 +466,10 @@ class JoyCaptionerKobold:
             "top_p": 0.9,
         }
         req = urllib.request.Request(
-            f"http://127.0.0.1:{self.port}/v1/chat/completions",
+            f"{self.base_url}/v1/chat/completions",
             data=json.dumps(payload).encode(),
             method="POST",
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", **self._auth_headers()},
         )
         with urllib.request.urlopen(req, timeout=120) as resp:
             data = json.loads(resp.read())

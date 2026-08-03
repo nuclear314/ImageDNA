@@ -77,6 +77,54 @@ support via Vulkan).
 - **Attribution:** same as Windows — KoboldCpp's own code is AGPL v3.0 (llama.cpp is MIT); ImageDNA runs
   its official, unmodified Linux binary as a separate subprocess.
 
+### Using a remote KoboldCpp instance
+
+Both the Windows and Linux standalone builds also support pointing Step 2 at a KoboldCpp instance running
+somewhere else — a beefier machine on your LAN, or any hardware this app's own GPU detection doesn't
+recognize — instead of downloading and running one locally.
+
+- In Settings → Natural Language Captioning → Connection, choose **Remote server** and enter that
+  instance's base URL (e.g. `http://192.168.1.50:5001`), plus an API key if it's running with KoboldCpp's
+  `--password` option.
+- ImageDNA does not download, launch, or manage that instance — you're responsible for keeping it running
+  with a vision-capable model and its `mmproj` file already loaded.
+- The caption model and quantization dropdowns are hidden in this mode, since they're determined by
+  whatever the remote server already has loaded, not by ImageDNA.
+- If no compatible local GPU is detected, this mode is selected automatically (the local option is disabled
+  in that case, since there's no CPU fallback).
+
+**Recommended settings on the remote KoboldCpp server itself** — this is the machine you start
+`koboldcpp`/`koboldcpp.exe` on, separate from whatever machine is running ImageDNA:
+
+```bash
+koboldcpp --model llama-joycaption-beta-one-hf-llava-q4_k_m.gguf \
+          --mmproj llama-joycaption-beta-one-llava-mmproj-model-f16.gguf \
+          --usecublas \
+          --host 0.0.0.0 --port 5001 \
+          --contextsize 8192 \
+          --password <a-long-random-token>
+```
+
+- **A vision-capable GGUF + its matching `mmproj` file** — either of the models in ImageDNA's own catalog
+  (`JoyCaption Beta One` or `NSFWVision v5`, see `KOBOLD_CAPTION_MODELS` in `joycaptioner_kobold.py`) work
+  well, but any llava-style GGUF KoboldCpp can load with a vision projector is compatible — ImageDNA just
+  calls its generic OpenAI-compatible `/v1/chat/completions` endpoint with an image, it doesn't require
+  one of the catalog models specifically.
+- **`--usecublas` on NVIDIA** (fastest) or **`--usevulkan`** for broader compatibility (AMD, or NVIDIA
+  without a CUDA-enabled KoboldCpp build) — matches what ImageDNA's own local mode uses.
+- **`--host 0.0.0.0`** (not the default `127.0.0.1`) so the port is actually reachable from other machines
+  on the network — ImageDNA's local mode binds `127.0.0.1` deliberately since it only ever talks to itself,
+  but a remote server needs to accept connections from elsewhere.
+- **`--contextsize 8192`** or higher — the default (2048) can be tight once an image's vision tokens plus a
+  detailed prompt and known-tags list are all in context; bump it further if you routinely use "Advanced
+  details" with many extra options and a large known-tags list.
+- **`--password <token>`** — KoboldCpp has no authentication by default. If this instance is reachable
+  beyond a trusted LAN (or even on a shared LAN), set a password and enter the same value as the API key
+  in ImageDNA's Settings; otherwise anyone who can reach the port can use your GPU and see your images.
+- There's no TLS here — traffic (including the base64-encoded image) is sent in plaintext. Keep this on a
+  trusted network or tunnel it (e.g. a VPN or SSH tunnel) rather than exposing it directly on the open
+  internet.
+
 ## Random Prompt Generator
 
 Click the **dice icon** in the top-left header to switch to the Random Prompt Generator. This tool builds structured prompts from the selected model's tag vocabulary.
@@ -243,6 +291,16 @@ toolkit just needs to expose the host's NVIDIA driver into the container.
 
 Without `WITH_JOYCAPTION=true`, the Step 2 card in the running app shows its normal "missing dependencies"
 message and everything else (WD14 tagging, EXIF extraction, prompt generation) works as usual.
+
+**Lighter alternative — remote KoboldCpp:** you can also get Step 2 in the stock CPU-only image (no
+`WITH_JOYCAPTION` build, no `torch`, no `--gpus all`) by setting `IMAGEDNA_CAPTION_BACKEND=kobold` and
+pointing Settings → Natural Language Captioning → Connection at a KoboldCpp instance running elsewhere —
+see "Using a remote KoboldCpp instance" above. The stock image has no bundled GPU passthrough for the
+*local* KoboldCpp option, so remote is the realistic choice here:
+
+```bash
+docker run -p 5000:5000 -e IMAGEDNA_CAPTION_BACKEND=kobold imagedna
+```
 
 ## How to build the Windows standalone app
 

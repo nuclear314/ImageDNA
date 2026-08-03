@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Star, Type, Sliders, RotateCcw, AlertTriangle, Share2, Cpu, Sparkles } from 'lucide-react';
-import { CaptionQuantization, CaptionCapability, CaptionModelOption } from '../types';
+import { CaptionQuantization, CaptionCapability, CaptionModelOption, CaptionConnectionMode } from '../types';
 import { KOBOLD_QUANT_OPTIONS_BY_MODEL } from '../lib/captionOptions';
 
 interface TaggerModel {
@@ -43,6 +43,12 @@ interface SettingsModalProps {
   captionModel: string;
   setCaptionModel: (val: string) => void;
   captionModels: readonly CaptionModelOption[];
+  koboldConnectionMode: CaptionConnectionMode;
+  setKoboldConnectionMode: (val: CaptionConnectionMode) => void;
+  koboldRemoteUrl: string;
+  setKoboldRemoteUrl: (val: string) => void;
+  koboldRemoteApiKey: string;
+  setKoboldRemoteApiKey: (val: string) => void;
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -72,13 +78,22 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   captionModel,
   setCaptionModel,
   captionModels,
+  koboldConnectionMode,
+  setKoboldConnectionMode,
+  koboldRemoteUrl,
+  setKoboldRemoteUrl,
+  koboldRemoteApiKey,
+  setKoboldRemoteApiKey,
 }) => {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const isKoboldBackend = captionCapability?.backend === 'kobold';
+  const isRemote = isKoboldBackend && koboldConnectionMode === 'remote';
   const captionQuantOptions = isKoboldBackend
     ? (KOBOLD_QUANT_OPTIONS_BY_MODEL[captionModel as keyof typeof KOBOLD_QUANT_OPTIONS_BY_MODEL] ?? KOBOLD_QUANT_OPTIONS_BY_MODEL['joycaption-beta-one'])
     : TRANSFORMERS_QUANT_OPTIONS;
-  const noGpuDetected = isKoboldBackend && captionCapability?.gpu_vendor === 'none';
+  // A missing local GPU only rules out the "Local" connection option now —
+  // "Remote" doesn't need one, so it no longer blocks the feature entirely.
+  const noLocalGpu = isKoboldBackend && captionCapability?.gpu_vendor === 'none';
 
   if (!isOpen) return null;
 
@@ -162,23 +177,77 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div>
                   <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">Natural Language Captioning</p>
                   <p className="text-[10px] text-zinc-400 dark:text-zinc-500">
-                    {noGpuDetected
-                      ? "No compatible GPU detected — Step 2 requires an NVIDIA or AMD GPU on Windows."
-                      : "Show the Step 2 card. Off by default — most setups don't have JoyCaption's dependencies installed, and it's a heavy, optional add-on even when they are."}
+                    Show the Step 2 card. Off by default — most setups don't have JoyCaption's dependencies installed, and it's a heavy, optional add-on even when they are.
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setEnableJoyCaption(!enableJoyCaption)}
-                disabled={noGpuDetected}
-                className={`relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${noGpuDetected ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${enableJoyCaption ? 'bg-fuchsia-600' : 'bg-zinc-200 dark:bg-zinc-700'}`}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${enableJoyCaption ? 'bg-fuchsia-600' : 'bg-zinc-200 dark:bg-zinc-700'}`}
               >
                 <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${enableJoyCaption ? 'translate-x-5' : 'translate-x-0'}`} />
               </button>
             </div>
-            {enableJoyCaption && !noGpuDetected && (
+            {enableJoyCaption && (
               <div className="ml-11 space-y-4">
                 {isKoboldBackend && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] text-zinc-400 dark:text-zinc-500 -mt-1 mb-1">Connection</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(['local', 'remote'] as const).map((mode) => {
+                        const disabled = mode === 'local' && noLocalGpu;
+                        return (
+                          <label
+                            key={mode}
+                            className={`flex flex-col gap-0.5 p-3 rounded-lg border transition-all ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${
+                              koboldConnectionMode === mode
+                                ? 'border-fuchsia-500 bg-fuchsia-500/5'
+                                : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="koboldConnectionMode"
+                              value={mode}
+                              checked={koboldConnectionMode === mode}
+                              disabled={disabled}
+                              onChange={(e) => setKoboldConnectionMode(e.target.value as CaptionConnectionMode)}
+                              className="sr-only"
+                            />
+                            <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">{mode === 'local' ? 'Local (bundled)' : 'Remote server'}</p>
+                            <p className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                              {mode === 'local'
+                                ? (disabled ? 'Requires an NVIDIA or AMD GPU on this machine.' : 'Downloads and runs KoboldCpp here.')
+                                : 'Point at a KoboldCpp instance already running elsewhere.'}
+                            </p>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {isRemote && (
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      value={koboldRemoteUrl}
+                      onChange={(e) => setKoboldRemoteUrl(e.target.value)}
+                      placeholder="http://192.168.1.50:5001"
+                      className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-sm text-zinc-700 dark:text-zinc-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 placeholder:text-zinc-400 dark:placeholder:text-zinc-500"
+                    />
+                    <input
+                      type="password"
+                      value={koboldRemoteApiKey}
+                      onChange={(e) => setKoboldRemoteApiKey(e.target.value)}
+                      placeholder="API key (optional)"
+                      className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-sm text-zinc-700 dark:text-zinc-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 placeholder:text-zinc-400 dark:placeholder:text-zinc-500"
+                    />
+                    <p className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                      Base URL of an already-running KoboldCpp instance. Model and quantization are determined by that server, not here.
+                    </p>
+                  </div>
+                )}
+                {!isRemote && isKoboldBackend && (
                   <div className="space-y-2">
                     <p className="text-[10px] text-zinc-400 dark:text-zinc-500 -mt-1 mb-1">
                       Caption model for Step 2. Downloaded on first use.
@@ -213,6 +282,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     ))}
                   </div>
                 )}
+                {!isRemote && (
                 <div className="space-y-2">
                   <p className="text-[10px] text-zinc-400 dark:text-zinc-500 -mt-1 mb-1">
                     {isKoboldBackend
@@ -248,6 +318,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   </label>
                 ))}
                 </div>
+                )}
               </div>
             )}
           </div>

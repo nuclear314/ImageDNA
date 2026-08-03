@@ -49,10 +49,10 @@ The app has four main views toggled from the header:
 - `GET /api/tags` — returns full tag vocabulary for the active model
 - `POST /api/exif` — accepts image file, returns structured EXIF metadata and PNG text chunks (including Stable Diffusion `parameters`)
 - `GET /api/status` — returns `{status, model}` reflecting tagger load state (`idle`/`downloading`/`ready`/`error`); polled by the Windows/Linux launchers and the frontend's processing view, never triggers loading itself
-- `POST /api/caption` — Step 2 natural-language captioning. Accepts image file + mode/tone/quantization/extra_options/known_tags, and (Windows/kobold backend only) `caption_model`; returns `{caption, prompt_used}`; 503s with `{"error": "missing_dependencies"}` if `requirements-joycaption.txt` isn't installed (transformers backend) or `joycaptioner_kobold.py` isn't present (kobold backend)
-- `GET /api/caption-status` — returns `_caption_state` (`{status, model, error, stage}`); `stage` (`koboldcpp`/`gguf`/`mmproj`/`starting`/`None`) is only populated by the kobold backend's artifact-download progress. Polled by the frontend while a caption is composing
-- `POST /api/caption-enable` — kobold backend only; accepts JSON `{quantization, caption_model}`, kicks off the (potentially multi-GB) KoboldCpp+GGUF+mmproj download/load in a background thread and returns immediately, so opting in from Settings doesn't wait for the first Compose click. No-op on the transformers backend (still safe to call — reuses `get_captioner()`)
-- `GET /api/caption-capability` — returns `{backend, available, cuda, gpu_vendor}` (`backend` is `"transformers"` or `"kobold"`; dependencies installed / GPU detected), a cheap cached check; backs the header's fast/slow caption speed badge, fetched once on app load
+- `POST /api/caption` — Step 2 natural-language captioning. Accepts image file + mode/tone/quantization/extra_options/known_tags, and (Windows/kobold backend only) `caption_model`, plus (kobold backend, remote connection mode only) `kobold_remote_url`/`kobold_api_key`; returns `{caption, prompt_used}`; 503s with `{"error": "missing_dependencies"}` if `requirements-joycaption.txt` isn't installed (transformers backend) or `joycaptioner_kobold.py` isn't present (kobold backend)
+- `GET /api/caption-status` — returns `_caption_state` (`{status, model, error, stage}`); `stage` (`koboldcpp`/`gguf`/`mmproj`/`starting`/`connecting`/`None`) is only populated by the kobold backend's artifact-download (or, in remote mode, connection-probe) progress. Polled by the frontend while a caption is composing
+- `POST /api/caption-enable` — kobold backend only; accepts JSON `{quantization, caption_model, remote_url, api_key}` (the latter two only meaningful in remote connection mode), kicks off the (potentially multi-GB, local mode) KoboldCpp+GGUF+mmproj download/load — or, in remote mode, just a reachability probe — in a background thread and returns immediately, so opting in from Settings doesn't wait for the first Compose click. No-op on the transformers backend (still safe to call — reuses `get_captioner()`)
+- `GET /api/caption-capability` — returns `{backend, available, cuda, gpu_vendor}` (`backend` is `"transformers"` or `"kobold"`; dependencies installed / GPU detected), a cheap cached check; backs the header's fast/slow caption speed badge, fetched once on app load. For the kobold backend, `available` is always `true` regardless of `gpu_vendor` — a missing local GPU only rules out that backend's *local* connection mode, not remote (see Two caption backends below)
 
 **Model loading:** the default tagger model starts loading in a background thread as soon as `server.py`
 boots, rather than lazily on first `/api/tag`/`/api/tags` request — this pre-warms the Windows/Linux
@@ -68,26 +68,42 @@ captioner instance is ever resident at a time.
 - **`transformers` (Docker/dev-server, including a bare `python server.py` run on Windows or Linux):**
   in-process `torch`/`transformers`/`bitsandbytes` via `joycaptioner.py`'s `JoyCaptioner`, keyed by
   quantization (`4bit`/`8bit`/`bf16`) alone — unchanged from before the Windows/Linux ports.
-- **`kobold` (Windows and Linux standalone builds only, set by `windows/main.py`/`linux/main.py`):**
-  `joycaptioner_kobold.py`'s `JoyCaptionerKobold` spawns a local `koboldcpp`/`koboldcpp.exe` subprocess
-  pointed at a downloaded GGUF model + mmproj file, and talks to it over its OpenAI-compatible
-  `/v1/chat/completions` HTTP endpoint — no torch/transformers/bitsandbytes involved. This HTTP
-  integration is confirmed working end-to-end on Windows (produces real NLP captions); the Linux port
-  reuses it unchanged and only adds OS-specific plumbing around it. The captioner cache key is
-  **(model_id, quantization)** here, since users can pick between GGUF models (`KOBOLD_CAPTION_MODELS`
-  catalog: `joycaption-beta-one` default, `nsfwvision-v5`), not just quantization. GPU is required
-  (NVIDIA or AMD via `--usevulkan`) — no CPU fallback; `detect_capability()` branches on
-  `platform.system()`: PowerShell's `Get-CimInstance Win32_VideoController` on Windows, `lspci` (falling
-  back to sysfs PCI vendor IDs) on Linux — neither imports torch. The koboldcpp binary + GGUF/mmproj
-  download opt-in on first enabling Step 2 (`POST /api/caption-enable`), cached under
-  `%APPDATA%\ImageDNA\kobold` (Windows) / `~/.local/share/ImageDNA/kobold` (Linux) and the same `HF_HOME`
-  the WD14 tagger uses. The Linux port replaces Windows' `ctypes.windll` Job Object cascading-kill with
-  `prctl(PR_SET_PDEATHSIG)` via `preexec_fn` — flagged as needing verification under real concurrent load
-  given `server.py`'s multi-threaded waitress server (`preexec_fn` + fork carries a documented deadlock
-  risk if the child-side code isn't minimal). Several constants in `joycaptioner_kobold.py` (exact
-  KoboldCpp release/URL per platform, exact GGUF/mmproj filenames per model) should be re-verified
-  against live releases whenever `KOBOLDCPP_VERSION` is bumped — see `WINDOWS_JOYCAPTION_GGUF.md` for the
-  full rationale.
+- **`kobold` (Windows and Linux standalone builds by default, set by `windows/main.py`/`linux/main.py`;
+  also selectable in Docker via `-e IMAGEDNA_CAPTION_BACKEND=kobold`):**
+  `joycaptioner_kobold.py`'s `JoyCaptionerKobold` talks to KoboldCpp over its OpenAI-compatible
+  `/v1/chat/completions` HTTP endpoint — no torch/transformers/bitsandbytes involved. Two **connection
+  modes**, chosen per-session from Settings (not by `CAPTION_BACKEND`, which stays `"kobold"` either way)
+  and passed through `JoyCaptionerKobold(remote_url=..., api_key=...)`:
+  - **Local** (default, unchanged behavior): spawns a local `koboldcpp`/`koboldcpp.exe` subprocess pointed
+    at a downloaded GGUF model + mmproj file. This HTTP integration is confirmed working end-to-end on
+    Windows (produces real NLP captions); the Linux port reuses it unchanged and only adds OS-specific
+    plumbing around it. GPU is required (NVIDIA or AMD via `--usevulkan`) — no CPU fallback;
+    `detect_capability()` branches on `platform.system()`: PowerShell's `Get-CimInstance
+    Win32_VideoController` on Windows, `lspci` (falling back to sysfs PCI vendor IDs) on Linux — neither
+    imports torch. The koboldcpp binary + GGUF/mmproj download opt-in on first enabling Step 2 (`POST
+    /api/caption-enable`), cached under `%APPDATA%\ImageDNA\kobold` (Windows) /
+    `~/.local/share/ImageDNA/kobold` (Linux) and the same `HF_HOME` the WD14 tagger uses. The Linux port
+    replaces Windows' `ctypes.windll` Job Object cascading-kill with `prctl(PR_SET_PDEATHSIG)` via
+    `preexec_fn` — flagged as needing verification under real concurrent load given `server.py`'s
+    multi-threaded waitress server (`preexec_fn` + fork carries a documented deadlock risk if the
+    child-side code isn't minimal).
+  - **Remote:** skips the download/spawn/lifecycle machinery entirely — `remote_url` (+ optional
+    `api_key`, sent as `Authorization: Bearer`) points at an already-running KoboldCpp instance the user
+    manages themselves; `_wait_ready_remote()` just probes `{url}/v1/models` for reachability instead of
+    polling a child process. Since no local inference happens, this mode needs no local GPU — the
+    frontend defaults into it automatically when `detect_capability()` finds none (see
+    `get_caption_capability()`'s `available: True` override), and it's how Docker gets Step 2 without
+    `WITH_JOYCAPTION`/`--gpus all` (see README's "Enabling Step 2 (JoyCaption) in Docker"). Model/quantization
+    selection doesn't apply here — the remote instance already has a fixed model loaded, so those Settings
+    dropdowns are hidden in this mode.
+
+  Either mode: the captioner cache key is **(model_id, quantization, remote_url)** (see
+  `get_captioner()`'s kobold branch), since users can pick between GGUF models (`KOBOLD_CAPTION_MODELS`
+  catalog: `joycaption-beta-one` default, `nsfwvision-v5`) as well as switch connection targets — any
+  change re-`unload()`s the previous instance before creating the replacement. Several constants in
+  `joycaptioner_kobold.py` (exact KoboldCpp release/URL per platform, exact GGUF/mmproj filenames per
+  model) should be re-verified against live releases whenever `KOBOLDCPP_VERSION` is bumped — see
+  `WINDOWS_JOYCAPTION_GGUF.md` for the full rationale.
 
 **State persistence:** React `useState` + `localStorage` (hook lives in `lib/useLocalStorage.ts`), all keys prefixed `imagedna:`
 
@@ -99,7 +115,7 @@ captioner instance is ever resident at a time.
 | `server.py` | Flask server and API endpoint handlers |
 | `tagger.py` | `WD14Tagger` class — HF model download, image preprocessing, ONNX inference |
 | `joycaptioner.py` | `JoyCaptioner` class — Step 2 natural-language captioning via JoyCaption Beta One using in-process transformers/bitsandbytes (Docker/dev-server backend; lazy-imported, optional GPU dependency). `build_prompt()` is shared with the kobold backend |
-| `joycaptioner_kobold.py` | `JoyCaptionerKobold` class — Windows/Linux Step 2 backend: spawns/manages a local KoboldCpp subprocess against a selectable GGUF model + mmproj, talks to it over its OpenAI-compatible HTTP API. Branches on `platform.system()` for GPU detection, binary download, and process-lifecycle cleanup. Also home to `KOBOLD_CAPTION_MODELS`, `detect_capability()`, and artifact download/caching |
+| `joycaptioner_kobold.py` | `JoyCaptionerKobold` class — kobold-backend Step 2 client: talks to KoboldCpp over its OpenAI-compatible HTTP API. Local connection mode (default) spawns/manages a local subprocess against a selectable GGUF model + mmproj, branching on `platform.system()` for GPU detection, binary download, and process-lifecycle cleanup; remote connection mode (`remote_url`/`api_key`) skips all of that and just talks HTTP to an instance the user manages elsewhere. Also home to `KOBOLD_CAPTION_MODELS`, `detect_capability()`, and artifact download/caching |
 | `components/BulkTagger.tsx` | Bulk view — multi-file queue, sequential `/api/tag` processing, zip export |
 | `components/PromptGenerator.tsx` | Tag vocabulary loading, priority-group prompt generation |
 | `components/ExifExtractor.tsx` | EXIF/PNG metadata extraction view — parses and splits SD generation parameters |
@@ -108,7 +124,7 @@ captioner instance is ever resident at a time.
 | `lib/exportZip.ts` | Builds a downloadable zip of image + matching `.txt` caption pairs (JSZip) |
 | `lib/useLocalStorage.ts` | Shared `useLocalStorage` hook (extracted from `App.tsx`) used by `App.tsx` and `CaptionPanel.tsx` |
 | `lib/captionOptions.ts` | Frontend catalog of JoyCaption modes and curated "extra option" toggles |
-| `components/SettingsModal.tsx` | Model selection, feature toggles (masterpiece, underscores, breast consolidation, DA mode), JoyCaption quantization (backend-conditional: bitsandbytes vs. GGUF option lists) and, on the kobold backend, caption model selection |
+| `components/SettingsModal.tsx` | Model selection, feature toggles (masterpiece, underscores, breast consolidation, DA mode), JoyCaption quantization (backend-conditional: bitsandbytes vs. GGUF option lists) and, on the kobold backend, caption model selection plus the Local/Remote connection-mode toggle (remote reveals a URL + API key field and hides model/quantization, which don't apply to a server it doesn't control) |
 | `components/SettingsPanel.tsx` | Confidence threshold slider and exclude tags textarea |
 | `components/InfoBauble.tsx` | Reusable hoverable tooltip `(i)` component |
 | `components/TagGrid.tsx` | Renders tags as color-coded chips with confidence % |
@@ -147,10 +163,11 @@ selects → textarea + copy button in `CaptionPanel`. Optional and additive.
   `/api/caption-capability` badge reads "Slow Caption" whenever `torch.cuda.is_available()` is `False`,
   which includes this case even on a machine with a working NVIDIA GPU. In Docker this is handled by the
   `WITH_JOYCAPTION` build arg (see Tech Stack); for bare venvs, see README's "GPU build of torch" note.
-- **Windows/Linux standalone builds (kobold backend):** no Python ML dependencies at all — requires an
-  NVIDIA or AMD GPU (via KoboldCpp's Vulkan backend) instead, downloaded opt-in on first enabling Step 2.
-  See README's "Step 2 on the Windows standalone build" / "Step 2 on the Linux standalone build" sections
-  and the Model Loading section above.
+- **Windows/Linux standalone builds, or Docker with `IMAGEDNA_CAPTION_BACKEND=kobold` (kobold backend):**
+  no Python ML dependencies at all. Local connection mode requires an NVIDIA or AMD GPU (via KoboldCpp's
+  Vulkan backend), downloaded opt-in on first enabling Step 2; remote connection mode needs no local GPU
+  at all — see README's "Step 2 on the Windows standalone build" / "Step 2 on the Linux standalone build" /
+  "Using a remote KoboldCpp instance" sections and the Model Loading section above.
 
 ## Available Models
 
@@ -186,4 +203,7 @@ docker run -p 5000:5000 imagedna
 # Docker with Step 2 (JoyCaption) enabled — requires NVIDIA GPU + NVIDIA Container Toolkit
 docker build --build-arg WITH_JOYCAPTION=true -t imagedna-joycaption .
 docker run --gpus all -p 5000:5000 imagedna-joycaption
+
+# Docker with Step 2 via a remote KoboldCpp instance — no build arg, no GPU needed locally
+docker run -p 5000:5000 -e IMAGEDNA_CAPTION_BACKEND=kobold imagedna
 ```

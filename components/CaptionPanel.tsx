@@ -2,13 +2,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Sparkles, Copy, Check, ChevronDown, Loader2, AlertTriangle } from 'lucide-react';
 import { useLocalStorage } from '../lib/useLocalStorage';
 import { CAPTION_MODES, CAPTION_EXTRA_OPTIONS, KOBOLD_CAPTION_MODELS } from '../lib/captionOptions';
-import { CaptionMode, CaptionTone, CaptionQuantization, CaptionStatus } from '../types';
+import { CaptionMode, CaptionTone, CaptionQuantization, CaptionStatus, CaptionConnectionMode } from '../types';
 
 const STAGE_LABELS: Record<string, string> = {
   koboldcpp: 'Downloading KoboldCpp engine…',
   gguf: 'Downloading GGUF model…',
   mmproj: 'Downloading vision projector…',
   starting: 'Starting captioning engine…',
+  connecting: 'Connecting to remote KoboldCpp…',
 };
 
 interface CaptionPanelProps {
@@ -16,9 +17,12 @@ interface CaptionPanelProps {
   knownTags: string[];
   quantization: CaptionQuantization;
   captionModel?: string | null;
+  connectionMode?: CaptionConnectionMode | null;
+  remoteUrl?: string;
+  apiKey?: string;
 }
 
-const CaptionPanel: React.FC<CaptionPanelProps> = ({ imageFile, knownTags, quantization, captionModel }) => {
+const CaptionPanel: React.FC<CaptionPanelProps> = ({ imageFile, knownTags, quantization, captionModel, connectionMode, remoteUrl, apiKey }) => {
   const [mode, setMode] = useLocalStorage<CaptionMode>('imagedna:captionMode', 'descriptive');
   const [tone, setTone] = useLocalStorage<CaptionTone>('imagedna:captionTone', 'casual');
   const [useKnownTags, setUseKnownTags] = useLocalStorage<boolean>('imagedna:captionUseKnownTags', true);
@@ -81,6 +85,10 @@ const CaptionPanel: React.FC<CaptionPanelProps> = ({ imageFile, knownTags, quant
       formData.append('quantization', quantization);
       if (captionModel) {
         formData.append('caption_model', captionModel);
+      }
+      if (connectionMode === 'remote') {
+        formData.append('kobold_remote_url', remoteUrl ?? '');
+        if (apiKey) formData.append('kobold_api_key', apiKey);
       }
 
       const instructions = selectedExtras
