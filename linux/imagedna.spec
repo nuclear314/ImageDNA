@@ -59,7 +59,25 @@ a = Analysis(
 # legitimately require bundling a system multiarch library, since
 # onnxruntime/numpy/etc. live in the separately-provisioned embedded server
 # runtime (see this file's top comment), not here.
-a.binaries = [b for b in a.binaries if not b[1].startswith(('/usr/lib/', '/lib/'))]
+#
+# One deliberate exception: libgirepository-2.0 is NOT stripped even though
+# it's resolved from a system lib directory like everything else here. Unlike
+# GTK/GLib/WebKit2GTK (UI toolkit libraries whose ABI must match the *other*
+# GTK-stack libraries already on the target system), libgirepository is
+# PyGObject's own introspection/marshaling engine — the library its _gi.so
+# extension is compiled and linked against, used only to read .typelib
+# metadata and marshal call arguments via libffi. It has no ABI relationship
+# with GTK/WebKit's own C ABI, so it should travel as a matched pair with
+# _gi.so rather than resolve from the end-user's system. Suspected mechanism
+# behind an observed "TypeError: Must be number, not method" crash inside
+# pywebview's GTK backend (marshaling GLib.idle_add's callback argument) on
+# an end-user system with a much newer gobject-introspection than the CI
+# build machine's, that did not reproduce using the end-user's own system
+# PyGObject — VERIFY this actually resolves it before trusting this comment.
+a.binaries = [
+    b for b in a.binaries
+    if 'libgirepository' in b[1] or not b[1].startswith(('/usr/lib/', '/lib/'))
+]
 a.datas = [d for d in a.datas if 'gi_typelibs' not in d[0]]
 
 pyz = PYZ(a.pure)
