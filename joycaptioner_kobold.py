@@ -5,7 +5,7 @@ its OpenAI-compatible /v1/chat/completions HTTP endpoint, instead of loading
 transformers/bitsandbytes in-process (see joycaptioner.py, used by Docker/dev).
 
 Only active when IMAGEDNA_CAPTION_BACKEND=kobold (set by windows/main.py and
-linux/main.py for their respective packaged standalone builds) — see server.py's
+flatpak/main.py for their respective packaged standalone builds) — see server.py's
 CAPTION_BACKEND dispatch.
 
 The KoboldCpp release and both catalog models' GGUF/mmproj repos and filenames
@@ -270,7 +270,7 @@ def _assign_job_object(pid):
 # server.py process that Popen'd it) dies for any reason, including an abrupt
 # SIGKILL — the closest analog to the Windows Job Object's
 # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE cascading-kill behavior, tied to the same
-# parent/child relationship (server.py -> koboldcpp), not to linux/main.py's.
+# parent/child relationship (server.py -> koboldcpp), not to flatpak/main.py's.
 #
 # subprocess.Popen(preexec_fn=...) in a *multi-threaded* parent carries a
 # documented fork-deadlock risk in Python's own docs (fork() only duplicates

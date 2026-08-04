@@ -60,18 +60,21 @@ the selected caption model plus its vision projector (`mmproj`) file.
   downloads and runs KoboldCpp's official, unmodified binary as a separate subprocess — it is not linked
   against or vendored in this repository.
 
-### Step 2 on the Linux standalone build
+### Step 2 on the Flatpak build
 
-The Linux standalone build uses the same KoboldCpp-based backend as the Windows standalone build (see
-above) — no `torch`/`transformers`/`bitsandbytes` in-process, same rationale (small release size, AMD
-support via Vulkan).
+The Flatpak build uses the same KoboldCpp-based backend as the Windows standalone build (see above) — no
+`torch`/`transformers`/`bitsandbytes` in-process, same rationale (small install size, AMD support via
+Vulkan).
 
 - **Opt-in, on demand:** nothing is downloaded until you turn on Natural Language Captioning in Settings.
   `koboldcpp` plus the GGUF/mmproj files (several GB) download once and are cached under
-  `~/.local/share/ImageDNA/kobold` and `~/.local/share/ImageDNA/models`.
+  `~/.var/app/io.github.nuclear314.ImageDNA/data/ImageDNA/kobold` and the equivalent `.../models` path —
+  Flatpak auto-redirects `XDG_DATA_HOME` into the sandboxed data dir, so the app needs no Flatpak-specific
+  code to land in the right place.
 - **GPU required:** same as Windows — an NVIDIA or AMD GPU (AMD via KoboldCpp's Vulkan backend), no CPU
   fallback. GPU vendor detection shells out to `lspci` (falling back to reading PCI vendor IDs from
-  `/sys/class/drm/` if `lspci` itself isn't present).
+  `/sys/class/drm/` if `lspci` itself isn't present); GPU access itself is granted to the sandbox via the
+  manifest's `--device=dri` permission.
 - **Caption model / quantization:** same catalog and GGUF quant levels as Windows (JoyCaption Beta One /
   NSFWVision v5; Q4_K_M / Q5_K_M / Q6_K or Q8_0 depending on model).
 - **Attribution:** same as Windows — KoboldCpp's own code is AGPL v3.0 (llama.cpp is MIT); ImageDNA runs
@@ -79,7 +82,7 @@ support via Vulkan).
 
 ### Using a remote KoboldCpp instance
 
-Both the Windows and Linux standalone builds also support pointing Step 2 at a KoboldCpp instance running
+Both the Windows and Flatpak standalone builds also support pointing Step 2 at a KoboldCpp instance running
 somewhere else — a beefier machine on your LAN, or any hardware this app's own GPU detection doesn't
 recognize — instead of downloading and running one locally.
 
@@ -200,22 +203,26 @@ First run requires internet access to download the tagger model from Hugging Fac
 
 ## How to run locally (Linux)
 
-A packaged Linux build (`ImageDNA-x86_64.AppImage`) runs standalone — no Python, Node, or Docker needed.
-Grab a build from CI (see [How to build the Linux standalone app](#how-to-build-the-linux-standalone-app))
-or a release if one's been published, then run the AppImage.
+A packaged Flatpak build runs standalone — no Python, Node, or Docker needed, and no GTK/WebKit2GTK
+version-matching to worry about (see [How to build the Flatpak](#how-to-build-the-flatpak) for why). Grab
+the `.flatpak` bundle from CI or a release if one's been published.
 
 **Prerequisites:**
-- GTK3 and WebKit2GTK runtime libraries — on Debian/Ubuntu: `libwebkit2gtk-4.1-0` (or the `-4.0` variant on
-  older distros; `pywebview` falls back automatically). These are **not** bundled into the AppImage (see
-  [How to build the Linux standalone app](#how-to-build-the-linux-standalone-app) for why) and must already
-  be present on the system, similar to how the Windows build relies on the OS already having WebView2.
-- FUSE (`libfuse2` on Debian/Ubuntu) to run the AppImage directly. If FUSE isn't available (e.g. inside
-  some containers), run it with `--appimage-extract-and-run` instead.
-- The downloaded AppImage needs its executable bit set before first run:
-  `chmod +x ImageDNA-x86_64.AppImage`.
+- `flatpak` itself — most distros ship it, or see [flatpak.org/setup](https://flatpak.org/setup/)
+- The Flathub remote, so the `org.gnome.Platform//50` runtime the app depends on can be fetched
+  automatically when you install the bundle:
+  ```bash
+  flatpak remote-add --if-not-exists --user flathub https://flathub.org/repo/flathub.flatpakrepo
+  ```
+
+```bash
+flatpak install --user ImageDNA.flatpak
+flatpak run io.github.nuclear314.ImageDNA
+```
 
 First run requires internet access to download the tagger model from Hugging Face into
-`~/.local/share/ImageDNA/models`; it's cached there afterward, so subsequent launches work offline.
+`~/.var/app/io.github.nuclear314.ImageDNA/data/ImageDNA/models` (Flatpak's sandboxed, per-app redirect of
+`~/.local/share`); it's cached there afterward, so subsequent launches work offline.
 
 ## How to run locally (Development)
 
@@ -340,71 +347,54 @@ First run requires internet access to download the tagger model from Hugging Fac
 `%APPDATA%\ImageDNA\models`; it's cached there afterward, so subsequent launches work offline. See
 [How to run locally (Windows)](#how-to-run-locally-windows) for the runtime prerequisites end users need.
 
-## How to build the Linux standalone app
+## How to build the Flatpak
 
-`linux/` contains a PyInstaller-based launcher that bundles an embedded Python server and opens the app in
-a native window (via `pywebview`'s GTK/WebKit2GTK backend), then wraps the result into a single portable
-`.AppImage` — no Python, Node, or Docker required by the end user, mirroring the Windows standalone build.
+`flatpak/` contains a Flatpak manifest that packages the same `pywebview`-based launcher as the Windows
+standalone build, but runs it against the `org.gnome.Platform`/`org.gnome.Sdk` runtime's own matched,
+tested GTK3/WebKit2GTK/girepository set instead of freezing them at build time — see
+`flatpak/io.github.nuclear314.ImageDNA.yml`'s header comment for why this replaced an earlier
+PyInstaller+AppImage approach (that approach's compiled PyGObject extension only worked correctly on
+end-user systems with a close-enough gobject-introspection version to the build machine's).
 
 **Prerequisites:**
-- Linux (built and tested against Ubuntu 24.04 — see the note on glibc compatibility below)
-- Python 3.12+
-- Node.js 24+
-- GTK/WebKit build and runtime dependencies (Debian/Ubuntu):
+- Linux
+- Python 3.12+ and Node.js 24+ (to build the frontend and generate the pip lockfile)
+- `flatpak` and `flatpak-builder`:
   ```bash
-  sudo apt-get install python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1 \
-    libwebkit2gtk-4.1-0 libgirepository-2.0-dev libcairo2-dev pkg-config fuse libfuse2
+  # Debian/Ubuntu
+  sudo apt-get install flatpak flatpak-builder
+  # Arch/Artix
+  sudo pacman -S flatpak flatpak-builder
   ```
-  `libgirepository-2.0-dev` (not the older `libgirepository1.0-dev`) is required because current
-  PyGObject (>=3.51.0) builds against the newer `girepository-2.0`; this package doesn't exist yet on
-  Ubuntu 22.04 and older, which is why CI moved to 24.04 (see below) rather than staying on 22.04.
-  `libcairo2-dev` is needed because building PyGObject from source pulls in `pycairo` as a build
-  dependency, which needs Cairo's own headers/pkg-config file to compile.
-- A virtual environment at the repo root (`.venv`) with `linux/requirements-linux.txt` installed —
-  `build.sh` activates it automatically if present
+- The GNOME Platform and SDK runtimes:
+  ```bash
+  flatpak remote-add --if-not-exists --user flathub https://flathub.org/repo/flathub.flatpakrepo
+  flatpak install --user flathub org.gnome.Platform//50 org.gnome.Sdk//50
+  ```
+  If `50` isn't the current branch, run `flatpak remote-ls flathub | grep org.gnome.Platform` and use
+  whatever version actually exists, updating `runtime-version` in
+  `flatpak/io.github.nuclear314.ImageDNA.yml` to match.
 
 ```bash
-cd linux
-chmod +x build.sh
-./build.sh
+npm install && npm run build
+flatpak/generate-pip-modules.sh
+flatpak-builder --user --repo=repo --force-clean build-dir flatpak/io.github.nuclear314.ImageDNA.yml
+flatpak build-bundle repo ImageDNA.flatpak io.github.nuclear314.ImageDNA master
 ```
 
-This runs a full build: compiles the frontend, builds the PyInstaller launcher, sets up the embedded
-Python server runtime (downloading a [`python-build-standalone`](https://github.com/astral-sh/python-build-standalone)
-release once, cached under `linux/cache/`, since python.org publishes no Linux equivalent of its Windows
-embeddable package), then packages everything into an AppImage.
+`generate-pip-modules.sh` fetches `flatpak-pip-generator` and resolves `flatpak/requirements-flatpak.txt`
+into `flatpak/python3-requirements.json` — flatpak-builder's sandboxed build step has no network access,
+so every pip dependency (including exact wheel URLs and hashes) has to be resolved ahead of time. It needs
+`pip install requirements-parser packaging` first if it errors on missing Python packages.
 
-For fast iteration on just the launcher (`linux/main.py` or `imagedna.spec`), skip re-provisioning the
-embedded server runtime:
+Install and run the result directly:
 
 ```bash
-./build.sh --skip-server
+flatpak install --user ImageDNA.flatpak
+flatpak run io.github.nuclear314.ImageDNA
 ```
-
-This only works if a full build has already populated `release/ImageDNA/server/` — it reuses that
-directory instead of rebuilding it. Note that `--skip-server` will **not** pick up changes to
-`requirements.txt` (or other server-side changes), since it skips the step that reinstalls those packages
-into the embedded runtime — run a full `build.sh` after touching `requirements.txt`.
-
-The output lands at `release/ImageDNA-x86_64.AppImage`. Launch it with
-`chmod +x release/ImageDNA-x86_64.AppImage && ./release/ImageDNA-x86_64.AppImage`.
-
-**Why GTK/WebKit2GTK aren't bundled into the AppImage:** PyInstaller's built-in hooks for `gi.repository.Gtk`
-auto-bundle the *build machine's own* GTK shared libraries the moment `pywebview`'s GTK backend imports
-`Gtk`, but there's no equivalent hook for `WebKit2`/`Soup` — bundling GTK alone would produce a frozen GTK3
-talking to a separately-versioned host WebKit2GTK (which links its own GTK3), a likely ABI mismatch. So
-`linux/imagedna.spec` deliberately strips those auto-bundled libraries back out and treats the whole
-GTK3/WebKit2GTK/Soup stack as a system prerequisite instead — see the prerequisites list in
-[How to run locally (Linux)](#how-to-run-locally-linux).
-
-**glibc compatibility:** the AppImage's floor is whatever glibc the build machine has. CI pins an explicit
-runner rather than floating on the newest available, so the resulting AppImage's compatibility floor stays
-predictable — an AppImage built on a newer glibc won't run on an older one. That pin is currently
-`ubuntu-24.04` rather than `ubuntu-22.04`: 22.04's `gobject-introspection` predates `girepository-2.0`,
-which current PyGObject requires to build (see the prerequisites above), so the glibc floor was traded
-upward out of necessity, not preference — worth revisiting if PyGObject ever restores a girepository-1.0
-fallback or a girepository-2.0 backport becomes available for 22.04.
 
 First run requires internet access to download the tagger model from Hugging Face into
-`~/.local/share/ImageDNA/models`; it's cached there afterward, so subsequent launches work offline. See
-[How to run locally (Linux)](#how-to-run-locally-linux) for the runtime prerequisites end users need.
+`~/.var/app/io.github.nuclear314.ImageDNA/data/ImageDNA/models`; it's cached there afterward, so
+subsequent launches work offline. See [How to run locally (Linux)](#how-to-run-locally-linux) for the
+runtime prerequisites end users need.

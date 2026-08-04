@@ -12,26 +12,27 @@ ImageDNA is a full-stack web application for extracting semantic tags from image
 `WITH_JOYCAPTION` build arg (`false` by default) — off, it's the CPU-only image with no torch/transformers/
 bitsandbytes; `--build-arg WITH_JOYCAPTION=true` installs those from PyTorch's CUDA (`cu126`) wheel index
 instead of plain PyPI (which resolves to a CPU-only wheel), for use with `docker run --gpus all`. Separate
-`windows/` and `linux/` standalone builds (PyInstaller + embedded Python + pywebview) also exist — see
-README's "How to build the Windows standalone app" / "How to build the Linux standalone app" sections.
-`windows/main.py` and `linux/main.py` both set `IMAGEDNA_CAPTION_BACKEND=kobold` (see Model Loading below)
-before spawning `server.py`, so Step 2 uses the KoboldCpp/GGUF backend on either standalone build instead
-of transformers/bitsandbytes. The Linux launcher uses `pywebview`'s GTK/WebKit2GTK backend (pinned
-explicitly via `webview.start(gui='gtk')`) and packages as a single `.AppImage`, since Linux has no
-WebView2-equivalent preinstalled runtime and no single "just run it" file convention the way a `.exe` is on
-Windows; GTK3/WebKit2GTK are treated as a system prerequisite rather than bundled (see `linux/imagedna.spec`).
-The Linux CI build (`.github/workflows/build.yml`'s `linux-build` job) pins an explicit Ubuntu version
-(currently `24.04`) rather than floating, trading off two opposing constraints: an older base widens the
-built AppImage's glibc-compatibility floor, but current PyGObject (`>=3.51.0`) only builds against the
-newer `girepository-2.0`, which isn't packaged on Ubuntu 22.04 and older — so the pin is the oldest Ubuntu
-version new enough to provide it, not the oldest one glibc alone would allow. Separately, `linux/build.sh`
-source-patches the installed PyGObject's `gi/overrides/GLib.py` right after `pip install` (unconditionally,
-every build) to work around an unresolved upstream bug (confirmed still present in PyGObject 3.57.0,
-https://gitlab.gnome.org/GNOME/pygobject/-/work_items/757): on end-user systems where GLib has fully
-removed the legacy `unix_signal_add` symbol in favor of a platform-specific replacement (GLib `>=2.88`,
-e.g. current Arch/Artix/Fedora Rawhide), PyGObject's own override-loading crashes at
-`gi.repository.Gtk` import time with `AssertionError: unix_signal_add_full was set deprecated but wasn't
-added to __all__` — no PyPI version of PyGObject fixes this, only the source patch does.
+`windows/` and `flatpak/` standalone builds also exist. `windows/` is a PyInstaller + embedded Python +
+`pywebview` build producing `ImageDNA.exe` — see README's "How to build the Windows standalone app"
+section. `flatpak/` packages the same `pywebview`-based launcher (`flatpak/main.py`) as a Flatpak app
+against the `org.gnome.Platform`/`org.gnome.Sdk` runtime (currently `//50`, see
+`flatpak/io.github.nuclear314.ImageDNA.yml`) rather than as a PyInstaller-built AppImage (the previous
+approach, `linux/`, now removed) — see README's "How to build the Flatpak" section. The AppImage's
+compiled PyGObject C extension was built once, on the CI machine, against that machine's girepository
+headers, which produced subtly-wrong argument marshaling on end-user systems with a sufficiently different
+gobject-introspection version (confirmed on Artix Linux / GLib 2.88.2), in a way that couldn't be fixed by
+bundling (breaks typelib discovery instead, typelib search paths are themselves distro-filesystem-
+convention-dependent) or by further CI base-image bumps (just moves the gap). Flatpak avoids this class of
+bug structurally: the GNOME runtime ships a matched, tested GTK3/GLib/WebKit2GTK/girepository set that the
+app always runs against, regardless of the end user's host distro — so, unlike the old `linux-build` CI
+job, `flatpak-build` (`.github/workflows/build.yml`) needs no Ubuntu-version pinning for glibc/
+girepository skew. `windows/main.py` and `flatpak/main.py` both set `IMAGEDNA_CAPTION_BACKEND=kobold` (see
+Model Loading below) before spawning `server.py`, so Step 2 uses the KoboldCpp/GGUF backend on either
+standalone build instead of transformers/bitsandbytes. `flatpak/python3-requirements.json`
+(flatpak-builder's offline pip module list — its sandboxed build has no network access, see
+`flatpak/generate-pip-modules.sh`'s header comment) isn't committed as a lockfile; the `flatpak-build` CI
+job regenerates it fresh on every build instead of trusting a hand-maintained copy to stay in sync with
+`flatpak/requirements-flatpak.txt`.
 
 ## Architecture
 
@@ -48,14 +49,14 @@ The app has four main views toggled from the header:
 - `POST /api/tag` — accepts image file, returns `general_tags` and `character_tags` with scores
 - `GET /api/tags` — returns full tag vocabulary for the active model
 - `POST /api/exif` — accepts image file, returns structured EXIF metadata and PNG text chunks (including Stable Diffusion `parameters`)
-- `GET /api/status` — returns `{status, model}` reflecting tagger load state (`idle`/`downloading`/`ready`/`error`); polled by the Windows/Linux launchers and the frontend's processing view, never triggers loading itself
+- `GET /api/status` — returns `{status, model}` reflecting tagger load state (`idle`/`downloading`/`ready`/`error`); polled by the Windows/Flatpak launchers and the frontend's processing view, never triggers loading itself
 - `POST /api/caption` — Step 2 natural-language captioning. Accepts image file + mode/tone/quantization/extra_options/known_tags, and (Windows/kobold backend only) `caption_model`, plus (kobold backend, remote connection mode only) `kobold_remote_url`/`kobold_api_key`; returns `{caption, prompt_used}`; 503s with `{"error": "missing_dependencies"}` if `requirements-joycaption.txt` isn't installed (transformers backend) or `joycaptioner_kobold.py` isn't present (kobold backend)
 - `GET /api/caption-status` — returns `_caption_state` (`{status, model, error, stage}`); `stage` (`koboldcpp`/`gguf`/`mmproj`/`starting`/`connecting`/`None`) is only populated by the kobold backend's artifact-download (or, in remote mode, connection-probe) progress. Polled by the frontend while a caption is composing
 - `POST /api/caption-enable` — kobold backend only; accepts JSON `{quantization, caption_model, remote_url, api_key}` (the latter two only meaningful in remote connection mode), kicks off the (potentially multi-GB, local mode) KoboldCpp+GGUF+mmproj download/load — or, in remote mode, just a reachability probe — in a background thread and returns immediately, so opting in from Settings doesn't wait for the first Compose click. No-op on the transformers backend (still safe to call — reuses `get_captioner()`)
 - `GET /api/caption-capability` — returns `{backend, available, cuda, gpu_vendor}` (`backend` is `"transformers"` or `"kobold"`; dependencies installed / GPU detected), a cheap cached check; backs the header's fast/slow caption speed badge, fetched once on app load. For the kobold backend, `available` is always `true` regardless of `gpu_vendor` — a missing local GPU only rules out that backend's *local* connection mode, not remote (see Two caption backends below)
 
 **Model loading:** the default tagger model starts loading in a background thread as soon as `server.py`
-boots, rather than lazily on first `/api/tag`/`/api/tags` request — this pre-warms the Windows/Linux
+boots, rather than lazily on first `/api/tag`/`/api/tags` request — this pre-warms the Windows/Flatpak
 launchers' startup wait and makes Docker readiness reflect real usability sooner. The JoyCaption captioner is the
 opposite: it's heavy/optional and is **never** eager-loaded — `get_captioner()` in `server.py` lazily
 imports the active backend's module only on first use, so a CPU-only / lightweight deployment never
@@ -68,7 +69,7 @@ captioner instance is ever resident at a time.
 - **`transformers` (Docker/dev-server, including a bare `python server.py` run on Windows or Linux):**
   in-process `torch`/`transformers`/`bitsandbytes` via `joycaptioner.py`'s `JoyCaptioner`, keyed by
   quantization (`4bit`/`8bit`/`bf16`) alone — unchanged from before the Windows/Linux ports.
-- **`kobold` (Windows and Linux standalone builds by default, set by `windows/main.py`/`linux/main.py`;
+- **`kobold` (Windows and Flatpak standalone builds by default, set by `windows/main.py`/`flatpak/main.py`;
   also selectable in Docker via `-e IMAGEDNA_CAPTION_BACKEND=kobold`):**
   `joycaptioner_kobold.py`'s `JoyCaptionerKobold` talks to KoboldCpp over its OpenAI-compatible
   `/v1/chat/completions` HTTP endpoint — no torch/transformers/bitsandbytes involved. Two **connection
@@ -76,17 +77,18 @@ captioner instance is ever resident at a time.
   and passed through `JoyCaptionerKobold(remote_url=..., api_key=...)`:
   - **Local** (default, unchanged behavior): spawns a local `koboldcpp`/`koboldcpp.exe` subprocess pointed
     at a downloaded GGUF model + mmproj file. This HTTP integration is confirmed working end-to-end on
-    Windows (produces real NLP captions); the Linux port reuses it unchanged and only adds OS-specific
-    plumbing around it. GPU is required (NVIDIA or AMD via `--usevulkan`) — no CPU fallback;
-    `detect_capability()` branches on `platform.system()`: PowerShell's `Get-CimInstance
-    Win32_VideoController` on Windows, `lspci` (falling back to sysfs PCI vendor IDs) on Linux — neither
-    imports torch. The koboldcpp binary + GGUF/mmproj download opt-in on first enabling Step 2 (`POST
-    /api/caption-enable`), cached under `%APPDATA%\ImageDNA\kobold` (Windows) /
-    `~/.local/share/ImageDNA/kobold` (Linux) and the same `HF_HOME` the WD14 tagger uses. The Linux port
-    replaces Windows' `ctypes.windll` Job Object cascading-kill with `prctl(PR_SET_PDEATHSIG)` via
-    `preexec_fn` — flagged as needing verification under real concurrent load given `server.py`'s
-    multi-threaded waitress server (`preexec_fn` + fork carries a documented deadlock risk if the
-    child-side code isn't minimal).
+    Windows (produces real NLP captions); the Flatpak build reuses it unchanged and only adds OS-specific
+    plumbing around it — confirmed working end-to-end there too. GPU is required (NVIDIA or AMD via
+    `--usevulkan`) — no CPU fallback; `detect_capability()` branches on `platform.system()`: PowerShell's
+    `Get-CimInstance Win32_VideoController` on Windows, `lspci` (falling back to sysfs PCI vendor IDs) on
+    Linux — neither imports torch. The koboldcpp binary + GGUF/mmproj download opt-in on first enabling
+    Step 2 (`POST /api/caption-enable`), cached under `%APPDATA%\ImageDNA\kobold` (Windows) /
+    `~/.var/app/io.github.nuclear314.ImageDNA/data/ImageDNA/kobold` (Flatpak — `flatpak/main.py` sets
+    `IMAGEDNA_KOBOLD_HOME` under `XDG_DATA_HOME`, which Flatpak auto-redirects into the sandboxed data dir)
+    and the same `HF_HOME` the WD14 tagger uses. The Linux side replaces Windows' `ctypes.windll` Job
+    Object cascading-kill with `prctl(PR_SET_PDEATHSIG)` via `preexec_fn` — flagged as needing verification
+    under real concurrent load given `server.py`'s multi-threaded waitress server (`preexec_fn` + fork
+    carries a documented deadlock risk if the child-side code isn't minimal).
   - **Remote:** skips the download/spawn/lifecycle machinery entirely — `remote_url` (+ optional
     `api_key`, sent as `Authorization: Bearer`) points at an already-running KoboldCpp instance the user
     manages themselves; `_wait_ready_remote()` just probes `{url}/v1/models` for reachability instead of
@@ -163,10 +165,10 @@ selects → textarea + copy button in `CaptionPanel`. Optional and additive.
   `/api/caption-capability` badge reads "Slow Caption" whenever `torch.cuda.is_available()` is `False`,
   which includes this case even on a machine with a working NVIDIA GPU. In Docker this is handled by the
   `WITH_JOYCAPTION` build arg (see Tech Stack); for bare venvs, see README's "GPU build of torch" note.
-- **Windows/Linux standalone builds, or Docker with `IMAGEDNA_CAPTION_BACKEND=kobold` (kobold backend):**
+- **Windows/Flatpak standalone builds, or Docker with `IMAGEDNA_CAPTION_BACKEND=kobold` (kobold backend):**
   no Python ML dependencies at all. Local connection mode requires an NVIDIA or AMD GPU (via KoboldCpp's
   Vulkan backend), downloaded opt-in on first enabling Step 2; remote connection mode needs no local GPU
-  at all — see README's "Step 2 on the Windows standalone build" / "Step 2 on the Linux standalone build" /
+  at all — see README's "Step 2 on the Windows standalone build" / "Step 2 on the Flatpak build" /
   "Using a remote KoboldCpp instance" sections and the Model Loading section above.
 
 ## Available Models

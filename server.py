@@ -18,7 +18,7 @@ _taggers = {}  # Cache taggers by model name
 _tagger_lock = threading.Lock()
 _model_state = {"status": "idle", "model": None}  # idle | downloading | ready | error
 
-# Set by windows/main.py and linux/main.py for their packaged standalone builds
+# Set by windows/main.py and flatpak/main.py for their packaged standalone builds
 # only — a bare `python server.py` dev run (even on Windows/Linux) and Docker
 # all leave this unset, so they keep the transformers/bitsandbytes path unchanged.
 CAPTION_BACKEND = os.environ.get('IMAGEDNA_CAPTION_BACKEND', 'transformers')
