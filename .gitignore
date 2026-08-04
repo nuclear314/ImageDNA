@@ -33,3 +33,6 @@ windows/cache/
 windows/_server_backup/
 PHASE0_TESTING.md
 LINUX_STANDALONE_BUILD.md
+
+# Fetched build tool (downloaded on demand by generate-pip-modules.sh)
+flatpak/flatpak-pip-generator
