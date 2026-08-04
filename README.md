@@ -60,6 +60,74 @@ the selected caption model plus its vision projector (`mmproj`) file.
   downloads and runs KoboldCpp's official, unmodified binary as a separate subprocess — it is not linked
   against or vendored in this repository.
 
+### Step 2 on the Flatpak build
+
+The Flatpak build uses the same KoboldCpp-based backend as the Windows standalone build (see above) — no
+`torch`/`transformers`/`bitsandbytes` in-process, same rationale (small install size, AMD support via
+Vulkan).
+
+- **Opt-in, on demand:** nothing is downloaded until you turn on Natural Language Captioning in Settings.
+  `koboldcpp` plus the GGUF/mmproj files (several GB) download once and are cached under
+  `~/.var/app/io.github.nuclear314.ImageDNA/data/ImageDNA/kobold` and the equivalent `.../models` path —
+  Flatpak auto-redirects `XDG_DATA_HOME` into the sandboxed data dir, so the app needs no Flatpak-specific
+  code to land in the right place.
+- **GPU required:** same as Windows — an NVIDIA or AMD GPU (AMD via KoboldCpp's Vulkan backend), no CPU
+  fallback. GPU vendor detection shells out to `lspci` (falling back to reading PCI vendor IDs from
+  `/sys/class/drm/` if `lspci` itself isn't present); GPU access itself is granted to the sandbox via the
+  manifest's `--device=dri` permission.
+- **Caption model / quantization:** same catalog and GGUF quant levels as Windows (JoyCaption Beta One /
+  NSFWVision v5; Q4_K_M / Q5_K_M / Q6_K or Q8_0 depending on model).
+- **Attribution:** same as Windows — KoboldCpp's own code is AGPL v3.0 (llama.cpp is MIT); ImageDNA runs
+  its official, unmodified Linux binary as a separate subprocess.
+
+### Using a remote KoboldCpp instance
+
+Both the Windows and Flatpak standalone builds also support pointing Step 2 at a KoboldCpp instance running
+somewhere else — a beefier machine on your LAN, or any hardware this app's own GPU detection doesn't
+recognize — instead of downloading and running one locally.
+
+- In Settings → Natural Language Captioning → Connection, choose **Remote server** and enter that
+  instance's base URL (e.g. `http://192.168.1.50:5001`), plus an API key if it's running with KoboldCpp's
+  `--password` option.
+- ImageDNA does not download, launch, or manage that instance — you're responsible for keeping it running
+  with a vision-capable model and its `mmproj` file already loaded.
+- The caption model and quantization dropdowns are hidden in this mode, since they're determined by
+  whatever the remote server already has loaded, not by ImageDNA.
+- If no compatible local GPU is detected, this mode is selected automatically (the local option is disabled
+  in that case, since there's no CPU fallback).
+
+**Recommended settings on the remote KoboldCpp server itself** — this is the machine you start
+`koboldcpp`/`koboldcpp.exe` on, separate from whatever machine is running ImageDNA:
+
+```bash
+koboldcpp --model llama-joycaption-beta-one-hf-llava-q4_k_m.gguf \
+          --mmproj llama-joycaption-beta-one-llava-mmproj-model-f16.gguf \
+          --usecublas \
+          --host 0.0.0.0 --port 5001 \
+          --contextsize 8192 \
+          --password <a-long-random-token>
+```
+
+- **A vision-capable GGUF + its matching `mmproj` file** — either of the models in ImageDNA's own catalog
+  (`JoyCaption Beta One` or `NSFWVision v5`, see `KOBOLD_CAPTION_MODELS` in `joycaptioner_kobold.py`) work
+  well, but any llava-style GGUF KoboldCpp can load with a vision projector is compatible — ImageDNA just
+  calls its generic OpenAI-compatible `/v1/chat/completions` endpoint with an image, it doesn't require
+  one of the catalog models specifically.
+- **`--usecublas` on NVIDIA** (fastest) or **`--usevulkan`** for broader compatibility (AMD, or NVIDIA
+  without a CUDA-enabled KoboldCpp build) — matches what ImageDNA's own local mode uses.
+- **`--host 0.0.0.0`** (not the default `127.0.0.1`) so the port is actually reachable from other machines
+  on the network — ImageDNA's local mode binds `127.0.0.1` deliberately since it only ever talks to itself,
+  but a remote server needs to accept connections from elsewhere.
+- **`--contextsize 8192`** or higher — the default (2048) can be tight once an image's vision tokens plus a
+  detailed prompt and known-tags list are all in context; bump it further if you routinely use "Advanced
+  details" with many extra options and a large known-tags list.
+- **`--password <token>`** — KoboldCpp has no authentication by default. If this instance is reachable
+  beyond a trusted LAN (or even on a shared LAN), set a password and enter the same value as the API key
+  in ImageDNA's Settings; otherwise anyone who can reach the port can use your GPU and see your images.
+- There's no TLS here — traffic (including the base64-encoded image) is sent in plaintext. Keep this on a
+  trusted network or tunnel it (e.g. a VPN or SSH tunnel) rather than exposing it directly on the open
+  internet.
+
 ## Random Prompt Generator
 
 Click the **dice icon** in the top-left header to switch to the Random Prompt Generator. This tool builds structured prompts from the selected model's tag vocabulary.
@@ -132,6 +200,29 @@ or a release if one's been published, then just run the exe.
 
 First run requires internet access to download the tagger model from Hugging Face into
 `%APPDATA%\ImageDNA\models`; it's cached there afterward, so subsequent launches work offline.
+
+## How to run locally (Linux)
+
+A packaged Flatpak build runs standalone — no Python, Node, or Docker needed, and no GTK/WebKit2GTK
+version-matching to worry about (see [How to build the Flatpak](#how-to-build-the-flatpak) for why). Grab
+the `.flatpak` bundle from CI or a release if one's been published.
+
+**Prerequisites:**
+- `flatpak` itself — most distros ship it, or see [flatpak.org/setup](https://flatpak.org/setup/)
+- The Flathub remote, so the `org.gnome.Platform//50` runtime the app depends on can be fetched
+  automatically when you install the bundle:
+  ```bash
+  flatpak remote-add --if-not-exists --user flathub https://flathub.org/repo/flathub.flatpakrepo
+  ```
+
+```bash
+flatpak install --user ImageDNA.flatpak
+flatpak run io.github.nuclear314.ImageDNA
+```
+
+First run requires internet access to download the tagger model from Hugging Face into
+`~/.var/app/io.github.nuclear314.ImageDNA/data/ImageDNA/models` (Flatpak's sandboxed, per-app redirect of
+`~/.local/share`); it's cached there afterward, so subsequent launches work offline.
 
 ## How to run locally (Development)
 
@@ -208,6 +299,16 @@ toolkit just needs to expose the host's NVIDIA driver into the container.
 Without `WITH_JOYCAPTION=true`, the Step 2 card in the running app shows its normal "missing dependencies"
 message and everything else (WD14 tagging, EXIF extraction, prompt generation) works as usual.
 
+**Lighter alternative — remote KoboldCpp:** you can also get Step 2 in the stock CPU-only image (no
+`WITH_JOYCAPTION` build, no `torch`, no `--gpus all`) by setting `IMAGEDNA_CAPTION_BACKEND=kobold` and
+pointing Settings → Natural Language Captioning → Connection at a KoboldCpp instance running elsewhere —
+see "Using a remote KoboldCpp instance" above. The stock image has no bundled GPU passthrough for the
+*local* KoboldCpp option, so remote is the realistic choice here:
+
+```bash
+docker run -p 5000:5000 -e IMAGEDNA_CAPTION_BACKEND=kobold imagedna
+```
+
 ## How to build the Windows standalone app
 
 `windows/` contains a PyInstaller-based launcher that bundles an embedded Python server and opens the
@@ -245,3 +346,55 @@ The output lands in `release\ImageDNA\`. Launch the app with `release\ImageDNA\I
 First run requires internet access to download the tagger model from Hugging Face into
 `%APPDATA%\ImageDNA\models`; it's cached there afterward, so subsequent launches work offline. See
 [How to run locally (Windows)](#how-to-run-locally-windows) for the runtime prerequisites end users need.
+
+## How to build the Flatpak
+
+`flatpak/` contains a Flatpak manifest that packages the same `pywebview`-based launcher as the Windows
+standalone build, but runs it against the `org.gnome.Platform`/`org.gnome.Sdk` runtime's own matched,
+tested GTK3/WebKit2GTK/girepository set instead of freezing them at build time — see
+`flatpak/io.github.nuclear314.ImageDNA.yml`'s header comment for why this replaced an earlier
+PyInstaller+AppImage approach (that approach's compiled PyGObject extension only worked correctly on
+end-user systems with a close-enough gobject-introspection version to the build machine's).
+
+**Prerequisites:**
+- Linux
+- Python 3.12+ and Node.js 24+ (to build the frontend and generate the pip lockfile)
+- `flatpak` and `flatpak-builder`:
+  ```bash
+  # Debian/Ubuntu
+  sudo apt-get install flatpak flatpak-builder
+  # Arch/Artix
+  sudo pacman -S flatpak flatpak-builder
+  ```
+- The GNOME Platform and SDK runtimes:
+  ```bash
+  flatpak remote-add --if-not-exists --user flathub https://flathub.org/repo/flathub.flatpakrepo
+  flatpak install --user flathub org.gnome.Platform//50 org.gnome.Sdk//50
+  ```
+  If `50` isn't the current branch, run `flatpak remote-ls flathub | grep org.gnome.Platform` and use
+  whatever version actually exists, updating `runtime-version` in
+  `flatpak/io.github.nuclear314.ImageDNA.yml` to match.
+
+```bash
+npm install && npm run build
+flatpak/generate-pip-modules.sh
+flatpak-builder --user --repo=repo --force-clean build-dir flatpak/io.github.nuclear314.ImageDNA.yml
+flatpak build-bundle repo ImageDNA.flatpak io.github.nuclear314.ImageDNA master
+```
+
+`generate-pip-modules.sh` fetches `flatpak-pip-generator` and resolves `flatpak/requirements-flatpak.txt`
+into `flatpak/python3-requirements.json` — flatpak-builder's sandboxed build step has no network access,
+so every pip dependency (including exact wheel URLs and hashes) has to be resolved ahead of time. It needs
+`pip install requirements-parser packaging` first if it errors on missing Python packages.
+
+Install and run the result directly:
+
+```bash
+flatpak install --user ImageDNA.flatpak
+flatpak run io.github.nuclear314.ImageDNA
+```
+
+First run requires internet access to download the tagger model from Hugging Face into
+`~/.var/app/io.github.nuclear314.ImageDNA/data/ImageDNA/models`; it's cached there afterward, so
+subsequent launches work offline. See [How to run locally (Linux)](#how-to-run-locally-linux) for the
+runtime prerequisites end users need.

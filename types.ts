@@ -47,6 +47,11 @@ export type CaptionStatus = 'idle' | 'loading' | 'downloading' | 'error' | 'done
 // the transformers backend (Docker/dev), which only ever has one model.
 export type CaptionModelId = 'joycaption-beta-one' | 'nsfwvision-v5';
 
+// kobold backend only: whether server.py spawns/manages a local KoboldCpp
+// subprocess (default) or talks HTTP to an already-running instance elsewhere.
+// Ignored by the transformers backend, which has no such concept.
+export type CaptionConnectionMode = 'local' | 'remote';
+
 export interface CaptionModelOption {
   id: CaptionModelId;
   name: string;

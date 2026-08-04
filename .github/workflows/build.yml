@@ -44,3 +44,43 @@ jobs:
         with:
           name: ImageDNA-windows
           path: release/ImageDNA/
+
+  flatpak-build:
+    # Unlike the old linux/ AppImage pipeline, no glibc-skew pinning is
+    # needed here - the app runs against the GNOME runtime's own matched
+    # GTK3/GLib/WebKit2GTK/girepository, not whatever the build host
+    # happens to have (see the flatpak/ manifest's header comment).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install flatpak-builder and the GNOME Platform/Sdk
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder
+          flatpak remote-add --if-not-exists --user flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y --noninteractive flathub org.gnome.Platform//50 org.gnome.Sdk//50
+      - run: npm install && npm run build
+      - name: Regenerate the pip lockfile
+        # flatpak/python3-requirements.json isn't committed (see
+        # flatpak/generate-pip-modules.sh's header) - resolve it fresh from
+        # requirements-flatpak.txt on every build instead of trusting a
+        # hand-maintained copy to stay in sync.
+        run: |
+          pip install requirements-parser packaging
+          flatpak/generate-pip-modules.sh
+      - name: Build the Flatpak
+        run: |
+          flatpak-builder --user --repo=repo --force-clean build-dir flatpak/io.github.nuclear314.ImageDNA.yml
+          flatpak build-bundle repo ImageDNA.flatpak io.github.nuclear314.ImageDNA master
+      - name: Upload release artifact
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v7
+        with:
+          name: ImageDNA-flatpak
+          path: ImageDNA.flatpak

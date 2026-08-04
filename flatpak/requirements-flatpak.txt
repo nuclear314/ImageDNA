@@ -1,0 +1,23 @@
+# Flatpak equivalent of requirements.txt + linux/requirements-linux.txt,
+# merged into one list because the Flatpak build has no PyInstaller-launcher
+# vs embedded-server split (see flatpak/main.py and this manifest's comment
+# on why) — flatpak-pip-generator resolves this whole list into
+# python3-requirements.json as a single Flatpak module.
+#
+# Server deps (from requirements.txt — keep these two files' versions in
+# sync manually; there is no automated check for that yet):
+flask==3.1.3
+huggingface_hub==1.23.0
+numpy==2.5.1
+onnxruntime==1.27.0
+Pillow==12.3.0
+waitress==3.0.2
+
+# Launcher deps (from linux/requirements-linux.txt, minus pyinstaller which
+# has no role in a Flatpak build):
+pywebview==6.1
+# PyGObject is intentionally unpinned — it must resolve to whatever version
+# actually builds against the GNOME runtime/SDK's own girepository-2.0 at
+# Flatpak build time, the whole point of this migration is letting Flatpak's
+# matched runtime own that version instead of us pinning it.
+PyGObject

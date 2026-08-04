@@ -101,7 +101,13 @@ try:
     window = webview.create_window(
         'ImageDNA', 'http://127.0.0.1:5000',
         width=1280, height=900, min_size=(900, 650))
-    webview.start()
+    # pywebview defaults to private_mode=True (cookies/localStorage discarded on
+    # close) unless told otherwise here at start(), not create_window() — passing
+    # user_data alone (for HF_HOME/kobold above) never touched this, so Settings/
+    # excluded-tags/etc previously reset every launch despite living in
+    # localStorage. storage_path pins WebView2's profile under the same app-data
+    # folder so it survives close/reopen the same way HF_HOME does.
+    webview.start(private_mode=False, storage_path=os.path.join(user_data, 'webview'))
     # webview.start() blocks until the window is closed
 except Exception as exc:
     logging.exception('Failed to open the app window')

@@ -43,6 +43,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name='ImageDNA',
+    icon=os.path.join(root, 'windows', 'icon.ico'),
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

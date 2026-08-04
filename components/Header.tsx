@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Fingerprint, Github, Sun, Moon, Settings, Dices, ScanLine, Layers } from 'lucide-react';
-import { AppView, CaptionCapability } from '../types';
+import { AppView, CaptionCapability, CaptionConnectionMode } from '../types';
 import InfoBauble from './InfoBauble';
 
 interface HeaderProps {
@@ -11,9 +11,11 @@ interface HeaderProps {
   currentView: AppView;
   onViewChange: (view: AppView) => void;
   captionCapability: CaptionCapability | null;
+  koboldConnectionMode?: CaptionConnectionMode;
 }
 
-const Header: React.FC<HeaderProps> = ({ isDarkMode, setIsDarkMode, onSettingsClick, currentView, onViewChange, captionCapability }) => {
+const Header: React.FC<HeaderProps> = ({ isDarkMode, setIsDarkMode, onSettingsClick, currentView, onViewChange, captionCapability, koboldConnectionMode }) => {
+  const isRemoteCaption = captionCapability?.backend === 'kobold' && koboldConnectionMode === 'remote';
   return (
     <header className="border-b border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-[#09090b]/50 backdrop-blur-md sticky top-0 z-50 transition-colors">
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -59,7 +61,18 @@ const Header: React.FC<HeaderProps> = ({ isDarkMode, setIsDarkMode, onSettingsCl
           </nav>
           
           <div className="flex items-center gap-3">
-            {captionCapability && (
+            {captionCapability && isRemoteCaption && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border shadow-sm text-xs font-medium bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-400">
+                <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                <span className="hidden lg:inline">Remote Caption</span>
+                <InfoBauble
+                  placement="bottom-right"
+                  width="w-72"
+                  text="Step 2 natural-language captioning (JoyCaption) is running on a remote KoboldCpp server. Speed depends on that server's own hardware, not this machine."
+                />
+              </div>
+            )}
+            {captionCapability && !isRemoteCaption && (
               <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border shadow-sm text-xs font-medium ${
                 captionCapability.cuda
                   ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
