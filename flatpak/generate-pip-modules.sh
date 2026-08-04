@@ -17,7 +17,7 @@ GENERATOR="$SCRIPT_DIR/flatpak-pip-generator"
 if [[ ! -f "$GENERATOR" ]]; then
   echo "Fetching flatpak-pip-generator..."
   curl -fL -o "$GENERATOR" \
-    "https://raw.githubusercontent.com/flatpak/flatpak-builder-tools/master/pip/flatpak-pip-generator"
+    "https://raw.githubusercontent.com/flatpak/flatpak-builder-tools/master/pip/flatpak-pip-generator.py"
   chmod +x "$GENERATOR"
 fi
 
