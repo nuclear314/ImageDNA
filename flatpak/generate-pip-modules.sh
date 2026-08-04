@@ -22,9 +22,18 @@ if [[ ! -f "$GENERATOR" ]]; then
 fi
 
 echo "Generating python3-requirements.json..."
+# onnxruntime, hf_xet, PyYAML, MarkupSafe, numpy, and Pillow all fail to
+# resolve as buildable sdists inside flatpak-pip-generator's runtime-probed
+# sandbox (onnxruntime and hf_xet ship no sdist on PyPI at all — the latter's
+# a Rust/maturin build; the rest hit build-isolation/toolchain gaps under the
+# GNOME Sdk) — --prefer-wheels opts them into resolved wheels instead, which
+# requires pinning --runtime to the SDK actually used to build this manifest
+# (kept in sync with io.github.nuclear314.ImageDNA.yml's sdk/runtime-version).
 python3 "$GENERATOR" \
   --requirements-file="$SCRIPT_DIR/requirements-flatpak.txt" \
-  --output=python3-requirements
+  --output=python3-requirements \
+  --runtime=org.gnome.Sdk//50 \
+  --prefer-wheels=onnxruntime,hf_xet,pyyaml,markupsafe,numpy,pillow
 
 # flatpak-pip-generator writes into the current directory; move the result
 # next to this script regardless of where it was invoked from.
