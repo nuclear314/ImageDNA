@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Fingerprint, Github, Sun, Moon, Settings, Dices, ScanLine, Layers } from 'lucide-react';
+import { Fingerprint, Github, Sun, Moon, Settings, Dices, ScanLine, Layers, PenLine } from 'lucide-react';
 import { AppView, CaptionCapability, CaptionConnectionMode } from '../types';
 import InfoBauble from './InfoBauble';
 
@@ -12,9 +12,10 @@ interface HeaderProps {
   onViewChange: (view: AppView) => void;
   captionCapability: CaptionCapability | null;
   koboldConnectionMode?: CaptionConnectionMode;
+  enableJoyCaption: boolean;
 }
 
-const Header: React.FC<HeaderProps> = ({ isDarkMode, setIsDarkMode, onSettingsClick, currentView, onViewChange, captionCapability, koboldConnectionMode }) => {
+const Header: React.FC<HeaderProps> = ({ isDarkMode, setIsDarkMode, onSettingsClick, currentView, onViewChange, captionCapability, koboldConnectionMode, enableJoyCaption }) => {
   const isRemoteCaption = captionCapability?.backend === 'kobold' && koboldConnectionMode === 'remote';
   return (
     <header className="border-b border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-[#09090b]/50 backdrop-blur-md sticky top-0 z-50 transition-colors">
@@ -28,7 +29,7 @@ const Header: React.FC<HeaderProps> = ({ isDarkMode, setIsDarkMode, onSettingsCl
               ImageDNA
             </h1>
             <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-indigo-600 dark:text-indigo-500 leading-none">
-              {currentView === 'tagger' ? 'WD14 Interrogator' : currentView === 'promptGenerator' ? 'Prompt Generator' : currentView === 'exifExtractor' ? 'EXIF Extractor' : 'Bulk Tagger'}
+              {currentView === 'tagger' ? 'WD14 Interrogator' : currentView === 'promptGenerator' ? 'Prompt Generator' : currentView === 'exifExtractor' ? 'EXIF Extractor' : currentView === 'manualCaption' ? 'Manual Caption Input' : 'Bulk Tagger'}
             </p>
           </div>
           <div className="ml-4 flex items-center gap-0.5 bg-zinc-100 dark:bg-zinc-800 rounded-xl p-1 border border-zinc-200 dark:border-zinc-700">
@@ -37,6 +38,7 @@ const Header: React.FC<HeaderProps> = ({ isDarkMode, setIsDarkMode, onSettingsCl
               { view: 'bulk', icon: Layers, label: 'Bulk' },
               { view: 'promptGenerator', icon: Dices, label: 'Prompt' },
               { view: 'exifExtractor', icon: ScanLine, label: 'EXIF' },
+              ...(enableJoyCaption ? [{ view: 'manualCaption', icon: PenLine, label: 'Manual' }] as const : []),
             ] as const).map(({ view, icon: Icon, label }) => (
               <button
                 key={view}

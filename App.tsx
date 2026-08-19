@@ -25,6 +25,7 @@ import PromptGenerator from './components/PromptGenerator';
 import ExifExtractor from './components/ExifExtractor';
 import BulkTagger from './components/BulkTagger';
 import CaptionPanel from './components/CaptionPanel';
+import ManualCaption from './components/ManualCaption';
 
 const DEFAULT_MASTERPIECE_TAGS = 'masterpiece, best quality, highres, ultra-detailed';
 const BREAST_SIZES = ['flat', 'small', 'medium', 'large', 'huge', 'gigantic'];
@@ -250,7 +251,7 @@ const App: React.FC = () => {
         className="hidden"
         accept="image/*"
       />
-      <Header isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} onSettingsClick={() => setIsSettingsOpen(true)} currentView={currentView} onViewChange={setCurrentView} captionCapability={enableJoyCaption ? captionCapability : null} koboldConnectionMode={koboldConnectionMode} />
+      <Header isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} onSettingsClick={() => setIsSettingsOpen(true)} currentView={currentView} onViewChange={setCurrentView} captionCapability={enableJoyCaption ? captionCapability : null} koboldConnectionMode={koboldConnectionMode} enableJoyCaption={enableJoyCaption} />
 
       <SettingsModal
         isOpen={isSettingsOpen}
@@ -312,6 +313,18 @@ const App: React.FC = () => {
 
       {currentView === 'exifExtractor' && (
         <ExifExtractor />
+      )}
+
+      {currentView === 'manualCaption' && (
+        <ManualCaption
+          enableJoyCaption={enableJoyCaption}
+          quantization={captionQuantization}
+          captionModel={captionModel}
+          captionCapability={captionCapability}
+          connectionMode={koboldConnectionMode}
+          remoteUrl={koboldRemoteUrl}
+          apiKey={koboldRemoteApiKey}
+        />
       )}
 
       {currentView === 'bulk' && (
