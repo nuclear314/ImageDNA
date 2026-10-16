@@ -29,7 +29,7 @@ import ManualCaption from './components/ManualCaption';
 
 const DEFAULT_MASTERPIECE_TAGS = 'masterpiece, best quality, highres, ultra-detailed';
 const BREAST_SIZES = ['flat', 'small', 'medium', 'large', 'huge', 'gigantic'];
-const APP_VERSION = 'v2.4';
+const APP_VERSION = 'v2.5';
 
 const TAGGER_MODELS = [
   { id: 'SmilingWolf/wd-eva02-large-tagger-v3', name: 'EVA02 Large v3', description: 'Best accuracy (default)' },
